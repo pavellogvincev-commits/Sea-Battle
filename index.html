@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Tactical Battleship Prototype v1.2 (Full Restore)</title>
+    <title>Tactical Battleship Prototype v1.3 (Graphics Update)</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; gap: 20px; user-select: none;}
         h1, h2, h3, h4 { margin-top: 0; }
@@ -28,10 +28,12 @@
         .cell.highlight-target { background: #10b981 !important; outline: 3px solid #fff; z-index: 10;}
         
         .coord-text { position: absolute; top: 2px; left: 3px; font-size: 9px; color: rgba(255,255,255,0.4); pointer-events: none;}
-        .ship-icon-display { font-size: 20px; pointer-events: none; z-index: 4; text-shadow: 0 0 5px #000;}
+        
+        /* Стили для изображений кораблей */
+        .ship-image { position: absolute; top: 0; left: 0; z-index: 4; pointer-events: none; }
 
-        .ship-p0 { background-color: #3b82f6; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
-        .ship-p1 { background-color: #ef4444; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .ship-p0 { background-color: rgba(59, 130, 246, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .ship-p1 { background-color: rgba(239, 68, 68, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 5;}
         
         .anim-effect { position: absolute; font-size: 35px; z-index: 20; animation: popUp 0.8s ease-out forwards; pointer-events: none; }
@@ -53,7 +55,7 @@
         
         #ship-preview-container { display: flex; flex-direction: column; align-items: center; background: #222; padding: 10px; border-radius: 4px; margin-bottom: 10px;}
         #ship-preview { display: flex; gap: 2px; margin: 10px 0; }
-        .preview-cell { width: 30px; height: 30px; background: #888; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px;}
+        .preview-cell { width: 30px; height: 30px; background: #888; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; position: relative;}
         .preview-cell.is-anchor { background: #ffcc00; border-color: #d97706; color: #000;}
 
         .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column;}
@@ -72,7 +74,7 @@
 <div id="reroll-overlay" class="overlay">
     <div class="dialog-box">
         <h3>Отклонение!</h3>
-        <p>Использовать свойство <b>Подлодки</b> для переброса кубика?</p>
+        <p>Использовать свойство <b>Эсминца</b> для переброса кубика?</p>
         <div style="display:flex; gap:10px; margin-top:20px;">
             <button onclick="resolveReroll(true)" style="background: #10b981;">Да, перебросить!</button>
             <button onclick="resolveReroll(false)">Нет, оставить</button>
@@ -106,7 +108,7 @@
             <button id="btn-end-turn" onclick="endTurn()" style="background:#10b981; font-size: 16px;">Завершить ход</button>
         </div>
 
-        <h3 style="margin-bottom: 5px;">Ваши жетоны в руке:</h3>
+        <h3 style="margin-bottom: 5px;">Ваши жетоны:</h3>
         <div class="hand" id="player-hand"></div>
 
         <div id="actions-panel">
@@ -148,11 +150,9 @@
 </div>
 
 <script>
-    // --- ДАННЫЕ ПОЛЯ 10х10 ---
     const cols = ['А','Б','В','Г','Д','Е','Ж','З','И','К'];
     const rows = ['1','2','3','4','5','6','7','8','9','10'];
     
-    // 12 особых клеток
     const specialCoords = [
         'Б2','В3','Г4',
         'Ж2','З3','И4',
@@ -160,15 +160,16 @@
         'Ж7','З8','И9'
     ];
     
+    // Подлодка и Эсминец поменяны местами (названия, размеры, свойства)
     const shipBlueprints = {
-        'scout': { name: 'Разведчик', size: 2, icon: '🚁', desc: 'Разведка: шанс +1 жетон.' },
-        'corvette': { name: 'Корвет', size: 2, icon: '🚤', desc: 'Дает +1 дополнительный выстрел.' },
-        'destroyer': { name: 'Эсминец', size: 2, icon: '🛳️', desc: 'Неуязвим для быстрых выстрелов.' },
-        'submarine': { name: 'Подлодка', size: 3, icon: '🦈', desc: '1 переброс кубика при промахе.' },
-        'frigate': { name: 'Фрегат', size: 3, icon: '⛵', desc: '1 бесплатный быстрый выстрел в ход.' },
-        'battleship': { name: 'Линкор', size: 4, icon: '⚓', desc: 'Потопление врага = +1 ПО и +1 жетон.' }
+        'scout': { name: 'Разведчик', size: 2, desc: 'Разведка: шанс +1 жетон.' },
+        'corvette': { name: 'Корвет', size: 2, desc: 'Дает +1 дополнительный выстрел.' },
+        'submarine': { name: 'Подлодка', size: 2, desc: 'Неуязвима для быстрых выстрелов.' },
+        'destroyer': { name: 'Эсминец', size: 3, desc: '1 переброс кубика при промахе.' },
+        'frigate': { name: 'Фрегат', size: 3, desc: '1 бесплатный быстрый выстрел в ход.' },
+        'battleship': { name: 'Линкор', size: 4, desc: 'Потопление врага = +1 ПО и +1 жетон.' }
     };
-    const defaultFleet = ['scout', 'corvette', 'destroyer', 'submarine', 'frigate', 'battleship'];
+    const defaultFleet = ['scout', 'corvette', 'submarine', 'destroyer', 'frigate', 'battleship'];
 
     let bag = []; let discard = []; let boardState = Array(100).fill(null);
     let players = [
@@ -207,15 +208,11 @@
 
     function shuffle(array) { array.sort(() => Math.random() - 0.5); }
     function getIndexFromCoord(coord) { 
-        let letter = coord.match(/[А-Я]+/)[0];
-        let number = coord.match(/[0-9]+/)[0];
+        let letter = coord.match(/[А-Я]+/)[0]; let number = coord.match(/[0-9]+/)[0];
         return (parseInt(number)-1) * 10 + cols.indexOf(letter);
     }
     function getCoordFromIndex(index) { return cols[index % 10] + (Math.floor(index / 10) + 1); }
-    function getSector(index) { 
-        let c = index % 10; let r = Math.floor(index / 10);
-        return (c < 5 ? 0 : 1) + (r < 5 ? 0 : 2); 
-    }
+    function getSector(index) { return (index % 10 < 5 ? 0 : 1) + (Math.floor(index / 10) < 5 ? 0 : 2); }
     function log(msg) {
         const logEl = document.getElementById('game-log');
         logEl.innerHTML += `<div><span style="color:${currentPlayer===0?'#60a5fa':'#f87171'}">[${players[currentPlayer].name}]</span>: ${msg}</div>`;
@@ -238,7 +235,6 @@
         updateHandUI();
     }
 
-    // Восстановленная логика подсветки
     function hoverToken(coord, isHover) {
         if(currentPlayer === 1) return;
         let cellIdx = getIndexFromCoord(coord);
@@ -246,7 +242,6 @@
         if(cellEl) isHover ? cellEl.classList.add('highlight-target') : cellEl.classList.remove('highlight-target');
     }
 
-    // Восстановленная и исправленная логика селекта
     function updateDeploySelect() {
         let select = document.getElementById('ship-select');
         select.innerHTML = '';
@@ -258,7 +253,7 @@
         } else {
             players[0].unbuilt.forEach(shipId => { 
                 let opt = document.createElement('option');
-                opt.value = shipId; opt.innerText = `${shipBlueprints[shipId].icon} ${shipBlueprints[shipId].name} (${shipBlueprints[shipId].size} кл)`;
+                opt.value = shipId; opt.innerText = `${shipBlueprints[shipId].name} (${shipBlueprints[shipId].size} кл)`;
                 select.appendChild(opt);
             });
         }
@@ -281,7 +276,24 @@
         for(let i=0; i<size; i++) {
             let pCell = document.createElement('div');
             pCell.className = 'preview-cell' + (i === previewAnchorIdx ? ' is-anchor' : '');
-            pCell.innerText = i === previewAnchorIdx ? shipBlueprints[shipId].icon : '';
+            
+            // Отрисовка графики в превью
+            if (i === previewAnchorIdx) {
+                let img = document.createElement('img');
+                img.src = `assets/fleet1/${shipId}.png`;
+                img.className = 'ship-image';
+                if (previewDir === 'H') {
+                    img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
+                    img.style.height = '100%';
+                } else {
+                    img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`; // ширина остается длинной стороной
+                    img.style.height = '100%';
+                    img.style.transformOrigin = '15px 15px'; // центр ячейки превью 30x30
+                    img.style.transform = 'rotate(90deg)';
+                }
+                pCell.appendChild(img);
+            }
+            
             pCell.onclick = () => { previewAnchorIdx = i; updatePreview(); };
             container.appendChild(pCell);
         }
@@ -303,12 +315,7 @@
         const text = document.getElementById('dice-text');
         overlay.style.display = 'flex'; text.innerText = 'Бросаем кубик...';
         
-        const faces = [
-            { id: 'HIT', t: '🎯' }, { id: 'HIT', t: '🎯' },
-            { id: 'NORTH', t: '⬆️' }, { id: 'SOUTH', t: '⬇️' },
-            { id: 'EAST', t: '➡️' }, { id: 'WEST', t: '⬅️' }
-        ];
-        
+        const faces = [{ id: 'HIT', t: '🎯' }, { id: 'HIT', t: '🎯' }, { id: 'NORTH', t: '⬆️' }, { id: 'SOUTH', t: '⬇️' }, { id: 'EAST', t: '➡️' }, { id: 'WEST', t: '⬅️' }];
         let ticks = 0;
         let interval = setInterval(() => {
             cube.innerText = faces[Math.floor(Math.random() * faces.length)].t;
@@ -351,7 +358,7 @@
         if(!shipId) return alert("Все корабли уже построены!");
         let size = shipBlueprints[shipId].size;
         if(selectedTokens.length !== size) return alert(`Выберите ровно ${size} жетонов для оплаты!`);
-        uiMode = 'DEPLOYING'; log(`Спуск: Кликните на поле для Якоря (${shipBlueprints[shipId].icon}).`); updateUI();
+        uiMode = 'DEPLOYING'; log(`Спуск: Кликните на поле для Якоря.`); updateUI();
     }
 
     function startFireAction() {
@@ -448,7 +455,8 @@
         shipsBuiltTotal++;
         let newShipId = 's' + shipsBuiltTotal;
         cellsToOccupy.forEach(cIdx => {
-            boardState[cIdx] = { owner: currentPlayer, shipId: newShipId, type: shipId, destroyed: false, isAnchor: (cIdx === startIdx) };
+            // Сохраняем dir, чтобы знать, как поворачивать картинку
+            boardState[cIdx] = { owner: currentPlayer, shipId: newShipId, type: shipId, destroyed: false, isAnchor: (cIdx === startIdx), dir: dir };
             if(specialCoords.includes(getCoordFromIndex(cIdx))) { players[currentPlayer].vp += 1; log(`Особая клетка! +1 ПО.`); }
         });
 
@@ -460,7 +468,7 @@
 
         players[currentPlayer].shipsOnBoard++; 
         players[currentPlayer].unbuilt = players[currentPlayer].unbuilt.filter(s => s !== shipId);
-        log(`Спущен корабль: ${shipBlueprints[shipId].icon} ${shipBlueprints[shipId].name}.`); 
+        log(`Спущен корабль: ${shipBlueprints[shipId].name}.`); 
         
         if(!usedActions.includes('DEPLOY')) usedActions.push('DEPLOY');
         if(callback) callback(true);
@@ -485,16 +493,16 @@
         };
 
         rollDiceUI((roll) => {
-            if(roll !== 'HIT' && hasActiveShip(currentPlayer, 'submarine')) {
+            // Эсминец дает переброс
+            if(roll !== 'HIT' && hasActiveShip(currentPlayer, 'destroyer')) {
                 showRerollDialog((yes) => {
-                    if(yes) { log("<b>Подлодка:</b> Переброс кубика!"); rollDiceUI((nRoll) => resolveShot(nRoll)); } 
+                    if(yes) { log("<b>Эсминец:</b> Переброс кубика!"); rollDiceUI((nRoll) => resolveShot(nRoll)); } 
                     else resolveShot(roll);
                 });
             } else { resolveShot(roll); }
         });
     }
 
-    // --- КЛИК ПО КЛЕТКАМ ---
     function handleCellClick(index) {
         if(currentPlayer === 1) return; 
 
@@ -516,25 +524,21 @@
 
             if (selectedTokens.length === 1) {
                 let tCoord = players[currentPlayer].hand[selectedTokens[0]];
-                if (targetCoord !== tCoord) {
-                    return alert(`Промах! Для 1 жетона цель должна быть точно ${tCoord}.`);
-                }
+                if (targetCoord !== tCoord) { return alert(`Промах! Для 1 жетона цель должна быть точно ${tCoord}.`); }
                 discard.push(tCoord); players[currentPlayer].hand.splice(selectedTokens[0], 1); selectedTokens = [];
                 log(`Точный выстрел (1 жетон) в ${targetCoord}!`);
             } else {
                 let t1 = players[currentPlayer].hand[selectedTokens[0]];
                 let t2 = players[currentPlayer].hand[selectedTokens[1]];
                 
-                // Парсим координаты 10х10 правильно
                 let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
                 let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
                 let trgL = targetCoord.match(/[А-Я]+/)[0]; let trgN = targetCoord.match(/[0-9]+/)[0];
 
                 let isValid = (trgL === t1L && trgN === t2N) || (trgL === t2L && trgN === t1N);
 
-                if (!isValid) {
-                    return alert(`Промах! Цель ${targetCoord} не может быть составлена из жетонов ${t1} и ${t2}.`);
-                }
+                if (!isValid) { return alert(`Промах! Цель ${targetCoord} не может быть составлена из жетонов ${t1} и ${t2}.`); }
+                
                 selectedTokens.sort((a,b)=>b-a).forEach(idx => {
                     discard.push(players[currentPlayer].hand[idx]); players[currentPlayer].hand.splice(idx, 1);
                 });
@@ -558,7 +562,8 @@
         let cell = boardState[idx];
         if(!cell || cell.destroyed) return log("Плюх.");
         
-        if (cell.type === 'destroyer' && isFastShot) { log("💦 <b>Эсминец:</b> Увернулся от быстрого выстрела!"); return; }
+        // Подлодка уворачивается от быстрого выстрела
+        if (cell.type === 'submarine' && isFastShot) { log("💦 <b>Подлодка:</b> Увернулась от быстрого выстрела!"); return; }
         
         cell.destroyed = true; players[currentPlayer].vp += 1; log("💥 ПОПАДАНИЕ! +1 ПО.");
 
@@ -813,20 +818,32 @@
         for(let i=0; i<100; i++) {
             let cell = document.getElementById('cell-'+i);
             
-            // Важное исправление иконок: сохраняем только текст координат перед рендером
             cell.innerHTML = `<span class="coord-text">${getCoordFromIndex(i)}</span>`;
             cell.className = 'cell' + (specialCoords.includes(getCoordFromIndex(i)) ? ' special' : '');
             
             if(boardState[i]) {
                 cell.classList.add(`ship-p${boardState[i].owner}`);
                 
-                // Эмодзи рисуется ТОЛЬКО если это якорь и он не подбит
-                if(boardState[i].isAnchor && !boardState[i].destroyed) {
-                    let iconSpan = document.createElement('span');
-                    iconSpan.className = 'ship-icon-display';
-                    iconSpan.innerText = shipBlueprints[boardState[i].type].icon;
-                    cell.appendChild(iconSpan);
+                // Рендер картинки только на якоре
+                if(boardState[i].isAnchor) {
+                    let img = document.createElement('img');
+                    img.src = `assets/fleet${boardState[i].owner + 1}/${boardState[i].type}.png`;
+                    img.className = 'ship-image';
+                    let size = shipBlueprints[boardState[i].type].size;
+                    
+                    if (boardState[i].dir === 'H') {
+                        img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
+                        img.style.height = '100%';
+                    } else {
+                        // Вертикальный поворот графики
+                        img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
+                        img.style.height = '100%';
+                        img.style.transformOrigin = '22.5px 22.5px'; // Точный центр ячейки 45x45
+                        img.style.transform = 'rotate(90deg)';
+                    }
+                    cell.appendChild(img);
                 }
+                
                 if(boardState[i].destroyed) cell.innerHTML += `<div class="damage-marker"></div>`;
             }
         }
