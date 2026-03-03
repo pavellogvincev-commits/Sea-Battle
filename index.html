@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Tactical Battleship Prototype v1.3 (Graphics Update)</title>
+    <title>Tactical Battleship Prototype v1.4 (Graphics Fix)</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; gap: 20px; user-select: none;}
         h1, h2, h3, h4 { margin-top: 0; }
@@ -27,13 +27,17 @@
         .cell.special { box-shadow: inset 0 0 10px rgba(255, 215, 0, 0.8); background: #1e5a85;}
         .cell.highlight-target { background: #10b981 !important; outline: 3px solid #fff; z-index: 10;}
         
-        .coord-text { position: absolute; top: 2px; left: 3px; font-size: 9px; color: rgba(255,255,255,0.4); pointer-events: none;}
+        .coord-text { position: absolute; top: 2px; left: 3px; font-size: 9px; color: rgba(255,255,255,0.4); pointer-events: none; z-index: 10;}
         
         /* Стили для изображений кораблей */
         .ship-image { position: absolute; top: 0; left: 0; z-index: 4; pointer-events: none; }
 
         .ship-p0 { background-color: rgba(59, 130, 246, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         .ship-p1 { background-color: rgba(239, 68, 68, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        
+        /* Маркер якоря (точка или рамка) если нужен визуально на поле */
+        .anchor-marker { position: absolute; width: 8px; height: 8px; background: #ffcc00; border-radius: 50%; z-index: 6; pointer-events: none; box-shadow: 0 0 4px #000;}
+        
         .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 5;}
         
         .anim-effect { position: absolute; font-size: 35px; z-index: 20; animation: popUp 0.8s ease-out forwards; pointer-events: none; }
@@ -55,8 +59,8 @@
         
         #ship-preview-container { display: flex; flex-direction: column; align-items: center; background: #222; padding: 10px; border-radius: 4px; margin-bottom: 10px;}
         #ship-preview { display: flex; gap: 2px; margin: 10px 0; }
-        .preview-cell { width: 30px; height: 30px; background: #888; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; position: relative;}
-        .preview-cell.is-anchor { background: #ffcc00; border-color: #d97706; color: #000;}
+        .preview-cell { width: 30px; height: 30px; background: #888; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative;}
+        .preview-cell.is-anchor { background: #ffcc00; border-color: #d97706;}
 
         .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column;}
         #dice-cube { font-size: 80px; background: #fff; width: 150px; height: 150px; display: flex; align-items: center; justify-content: center; border-radius: 25px; box-shadow: 0 0 30px #ffcc00; color: #000; transition: transform 0.1s;}
@@ -160,7 +164,6 @@
         'Ж7','З8','И9'
     ];
     
-    // Подлодка и Эсминец поменяны местами (названия, размеры, свойства)
     const shipBlueprints = {
         'scout': { name: 'Разведчик', size: 2, desc: 'Разведка: шанс +1 жетон.' },
         'corvette': { name: 'Корвет', size: 2, desc: 'Дает +1 дополнительный выстрел.' },
@@ -275,10 +278,11 @@
         container.innerHTML = '';
         for(let i=0; i<size; i++) {
             let pCell = document.createElement('div');
+            // Подсветка якоря
             pCell.className = 'preview-cell' + (i === previewAnchorIdx ? ' is-anchor' : '');
             
-            // Отрисовка графики в превью
-            if (i === previewAnchorIdx) {
+            // ИСПРАВЛЕНИЕ: Графика ВСЕГДА рисуется начиная с первой клетки (i === 0)
+            if (i === 0) {
                 let img = document.createElement('img');
                 img.src = `assets/fleet1/${shipId}.png`;
                 img.className = 'ship-image';
@@ -286,9 +290,9 @@
                     img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
                     img.style.height = '100%';
                 } else {
-                    img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`; // ширина остается длинной стороной
+                    img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
                     img.style.height = '100%';
-                    img.style.transformOrigin = '15px 15px'; // центр ячейки превью 30x30
+                    img.style.transformOrigin = '15px 15px'; // Точный центр ячейки 30x30
                     img.style.transform = 'rotate(90deg)';
                 }
                 pCell.appendChild(img);
@@ -454,9 +458,18 @@
 
         shipsBuiltTotal++;
         let newShipId = 's' + shipsBuiltTotal;
-        cellsToOccupy.forEach(cIdx => {
-            // Сохраняем dir, чтобы знать, как поворачивать картинку
-            boardState[cIdx] = { owner: currentPlayer, shipId: newShipId, type: shipId, destroyed: false, isAnchor: (cIdx === startIdx), dir: dir };
+        
+        // ИСПРАВЛЕНИЕ: Добавлен флаг isHead для первой ячейки корабля
+        cellsToOccupy.forEach((cIdx, indexInArray) => {
+            boardState[cIdx] = { 
+                owner: currentPlayer, 
+                shipId: newShipId, 
+                type: shipId, 
+                destroyed: false, 
+                isAnchor: (cIdx === startIdx), 
+                isHead: (indexInArray === 0), // Голова корабля всегда тут
+                dir: dir 
+            };
             if(specialCoords.includes(getCoordFromIndex(cIdx))) { players[currentPlayer].vp += 1; log(`Особая клетка! +1 ПО.`); }
         });
 
@@ -824,8 +837,8 @@
             if(boardState[i]) {
                 cell.classList.add(`ship-p${boardState[i].owner}`);
                 
-                // Рендер картинки только на якоре
-                if(boardState[i].isAnchor) {
+                // ИСПРАВЛЕНИЕ: Картинка рисуется только на Голове корабля (первой клетке)
+                if(boardState[i].isHead) {
                     let img = document.createElement('img');
                     img.src = `assets/fleet${boardState[i].owner + 1}/${boardState[i].type}.png`;
                     img.className = 'ship-image';
@@ -835,13 +848,19 @@
                         img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
                         img.style.height = '100%';
                     } else {
-                        // Вертикальный поворот графики
                         img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
                         img.style.height = '100%';
-                        img.style.transformOrigin = '22.5px 22.5px'; // Точный центр ячейки 45x45
+                        img.style.transformOrigin = '22.5px 22.5px'; // Точный центр ячейки поля 45x45
                         img.style.transform = 'rotate(90deg)';
                     }
                     cell.appendChild(img);
+                }
+                
+                // Визуальный маркер якоря (маленький желтый кружок)
+                if(boardState[i].isAnchor && !boardState[i].destroyed) {
+                    let anchor = document.createElement('div');
+                    anchor.className = 'anchor-marker';
+                    cell.appendChild(anchor);
                 }
                 
                 if(boardState[i].destroyed) cell.innerHTML += `<div class="damage-marker"></div>`;
