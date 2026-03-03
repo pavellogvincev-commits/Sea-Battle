@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Tactical Battleship Prototype v1.2 (Full Restore)</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; gap: 20px; user-select: none;}
+        h1, h2, h3, h4 { margin-top: 0; }
+        
+        #global-scoreboard { display: flex; justify-content: space-around; background: #111; padding: 15px; border-radius: 8px; border: 2px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5);}
+        .player-score { text-align: center; padding: 10px 20px; border-radius: 6px; min-width: 250px;}
+        .player-score h2 { margin: 0 0 10px 0; }
+        .player-score p { margin: 5px 0; font-size: 16px; font-weight: bold;}
+        .score-p0 { background: rgba(59, 130, 246, 0.2); border: 2px solid #3b82f6; }
+        .score-p1 { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; }
+
+        #game-container { display: flex; gap: 30px; justify-content: center; }
+        #board-section { display: flex; flex-direction: column; align-items: center;}
+        #ui-section { width: 450px; background: #333; padding: 20px; border-radius: 8px;}
+        
+        #board { display: grid; grid-template-columns: repeat(10, 45px); grid-template-rows: repeat(10, 45px); gap: 2px; background: #555; border: 4px solid #444; position: relative;}
+        #board::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 4px; background: #ffcc00; transform: translateY(-50%); z-index: 5; pointer-events: none;}
+        #board::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; background: #ffcc00; transform: translateX(-50%); z-index: 5; pointer-events: none;}
+        
+        .cell { background: #1a4b6e; display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; transition: background 0.2s; width: 45px; height: 45px;}
+        .cell:hover { background: #2a6b9e; }
+        .cell.special { box-shadow: inset 0 0 10px rgba(255, 215, 0, 0.8); background: #1e5a85;}
+        .cell.highlight-target { background: #10b981 !important; outline: 3px solid #fff; z-index: 10;}
+        
+        .coord-text { position: absolute; top: 2px; left: 3px; font-size: 9px; color: rgba(255,255,255,0.4); pointer-events: none;}
+        .ship-icon-display { font-size: 20px; pointer-events: none; z-index: 4; text-shadow: 0 0 5px #000;}
+
+        .ship-p0 { background-color: #3b82f6; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .ship-p1 { background-color: #ef4444; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 5;}
+        
+        .anim-effect { position: absolute; font-size: 35px; z-index: 20; animation: popUp 0.8s ease-out forwards; pointer-events: none; }
+        @keyframes popUp { 0% { transform: scale(0); opacity: 1; } 50% { transform: scale(1.5); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+
+        .hand { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; min-height: 40px; background: #222; padding: 10px; border-radius: 4px;}
+        .token { background: #eee; color: #222; padding: 4px 8px; border-radius: 4px; font-weight: bold; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; font-size: 13px;}
+        .token:hover { transform: translateY(-2px); }
+        .token.selected { border-color: #ffcc00; background: #fffacd; box-shadow: 0 0 8px rgba(255, 204, 0, 0.8);}
+        .token.special { border: 2px dashed #d97706;}
+        
+        button { background: #4b5563; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 5px; font-weight: bold; transition: background 0.2s;}
+        button:hover:not(:disabled) { background: #6b7280; }
+        button:disabled { background: #374151; color: #666; cursor: not-allowed;}
+        .info-panel { margin-bottom: 20px; padding: 15px; background: #444; border-radius: 4px;}
+        .log { height: 180px; overflow-y: auto; background: #111; padding: 10px; font-size: 13px; font-family: monospace; border-radius: 4px;}
+        .action-group { border: 1px solid #555; padding: 10px; margin-bottom: 10px; border-radius: 4px;}
+        .action-group h4 { margin: 0 0 10px 0; color: #ccc;}
+        
+        #ship-preview-container { display: flex; flex-direction: column; align-items: center; background: #222; padding: 10px; border-radius: 4px; margin-bottom: 10px;}
+        #ship-preview { display: flex; gap: 2px; margin: 10px 0; }
+        .preview-cell { width: 30px; height: 30px; background: #888; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px;}
+        .preview-cell.is-anchor { background: #ffcc00; border-color: #d97706; color: #000;}
+
+        .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column;}
+        #dice-cube { font-size: 80px; background: #fff; width: 150px; height: 150px; display: flex; align-items: center; justify-content: center; border-radius: 25px; box-shadow: 0 0 30px #ffcc00; color: #000; transition: transform 0.1s;}
+        #dice-text { margin-top: 20px; font-size: 24px; color: #ffcc00; font-weight: bold; text-align: center;}
+        .dialog-box { background: #333; padding: 20px; border-radius: 8px; border: 2px solid #ffcc00; text-align: center; max-width: 400px;}
+    </style>
+</head>
+<body>
+
+<div id="dice-overlay" class="overlay">
+    <div id="dice-cube">🎲</div>
+    <div id="dice-text">Бросаем кубик...</div>
+</div>
+
+<div id="reroll-overlay" class="overlay">
+    <div class="dialog-box">
+        <h3>Отклонение!</h3>
+        <p>Использовать свойство <b>Подлодки</b> для переброса кубика?</p>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button onclick="resolveReroll(true)" style="background: #10b981;">Да, перебросить!</button>
+            <button onclick="resolveReroll(false)">Нет, оставить</button>
+        </div>
+    </div>
+</div>
+
+<div id="global-scoreboard">
+    <div class="player-score score-p0">
+        <h2 style="color: #60a5fa;">Вы (Игрок 1)</h2>
+        <p>ПО: <span id="vp-p0" style="color: #ffcc00; font-size: 1.2em;">0</span> / 21</p>
+        <p>Кораблей: <span id="ships-p0">0</span></p>
+    </div>
+    <div class="player-score score-p1">
+        <h2 style="color: #f87171;">Бот (Игрок 2)</h2>
+        <p>ПО: <span id="vp-p1" style="color: #ffcc00; font-size: 1.2em;">0</span> / 21</p>
+        <p>Кораблей: <span id="ships-p1">0</span></p>
+    </div>
+</div>
+
+<div id="game-container">
+    <div id="board-section">
+        <div id="board"></div>
+        <p style="color: #aaa; font-size: 13px;">Поле 10х10. Сектора 5х5. 12 особых клеток (по 3 на сектор).</p>
+    </div>
+
+    <div id="ui-section">
+        <div class="info-panel" id="turn-info">
+            <h2 id="current-player-text">Ход Игрока 1</h2>
+            <p style="font-size: 16px;">Действий осталось: <strong id="actions-left" style="color: #10b981;">2</strong></p>
+            <button id="btn-end-turn" onclick="endTurn()" style="background:#10b981; font-size: 16px;">Завершить ход</button>
+        </div>
+
+        <h3 style="margin-bottom: 5px;">Ваши жетоны в руке:</h3>
+        <div class="hand" id="player-hand"></div>
+
+        <div id="actions-panel">
+            <div class="action-group">
+                <button id="btn-scout" onclick="actionScout()">1. Разведка (Добрать 2 жетона)</button>
+            </div>
+
+            <div class="action-group">
+                <h4>2. Спуск корабля</h4>
+                <select id="ship-select" style="width:100%; margin-bottom:5px; padding:5px; font-size:16px;" onchange="updatePreview()"></select>
+                <div style="font-size: 13px; color: #ffcc00; margin-bottom: 10px; min-height: 20px;" id="ship-desc"></div>
+                
+                <div id="ship-preview-container">
+                    <span style="font-size: 12px; color: #aaa;">Кликните на палубу для выбора Якоря ⚓</span>
+                    <div id="ship-preview"></div>
+                    <button type="button" id="btn-rotate" onclick="togglePreviewDir()" style="width:auto; padding:5px 15px;">Повернуть 🔄</button>
+                </div>
+
+                <button id="btn-deploy" onclick="actionDeployStart()">Спустить (выберите якорную клетку на поле)</button>
+            </div>
+
+            <div class="action-group">
+                <h4>3. Выстрелы (Осталось: <span id="shots-left-text" style="color: #ffcc00;">0</span>)</h4>
+                <p style="font-size: 12px; color: #aaa; margin: 0 0 5px 0;">Точный: 1 жетон (точно в цель) ИЛИ 2 жетона (скрещение Буква+Цифра).</p>
+                <div style="display: flex; gap: 5px;">
+                    <button id="btn-fire-acc" onclick="actionFireAccurate()">Точный (1-2ж)</button>
+                    <button id="btn-fire-fast" onclick="actionFireFastStart()">Быстрый 🎲</button>
+                </div>
+            </div>
+
+            <div class="action-group">
+                <button id="btn-control" onclick="actionControl()">4. Контроль секторов</button>
+            </div>
+        </div>
+
+        <h3>Лог игры:</h3>
+        <div class="log" id="game-log"></div>
+    </div>
+</div>
+
+<script>
+    // --- ДАННЫЕ ПОЛЯ 10х10 ---
+    const cols = ['А','Б','В','Г','Д','Е','Ж','З','И','К'];
+    const rows = ['1','2','3','4','5','6','7','8','9','10'];
+    
+    // 12 особых клеток
+    const specialCoords = [
+        'Б2','В3','Г4',
+        'Ж2','З3','И4',
+        'Б7','В8','Г9',
+        'Ж7','З8','И9'
+    ];
+    
+    const shipBlueprints = {
+        'scout': { name: 'Разведчик', size: 2, icon: '🚁', desc: 'Разведка: шанс +1 жетон.' },
+        'corvette': { name: 'Корвет', size: 2, icon: '🚤', desc: 'Дает +1 дополнительный выстрел.' },
+        'destroyer': { name: 'Эсминец', size: 2, icon: '🛳️', desc: 'Неуязвим для быстрых выстрелов.' },
+        'submarine': { name: 'Подлодка', size: 3, icon: '🦈', desc: '1 переброс кубика при промахе.' },
+        'frigate': { name: 'Фрегат', size: 3, icon: '⛵', desc: '1 бесплатный быстрый выстрел в ход.' },
+        'battleship': { name: 'Линкор', size: 4, icon: '⚓', desc: 'Потопление врага = +1 ПО и +1 жетон.' }
+    };
+    const defaultFleet = ['scout', 'corvette', 'destroyer', 'submarine', 'frigate', 'battleship'];
+
+    let bag = []; let discard = []; let boardState = Array(100).fill(null);
+    let players = [
+        { id: 0, name: 'ВЫ', colorClass: 'p0', vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] },
+        { id: 1, name: 'БОТ', colorClass: 'p1', vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] }
+    ];
+    
+    let currentPlayer = 0; let actionsLeft = 2; let usedActions = []; let selectedTokens = [];
+    let uiMode = 'IDLE'; let shotsRemaining = 0; let shipsBuiltTotal = 0;
+    let freeFastShotUsed = false; let rerollCallback = null;
+
+    let previewDir = 'H'; let previewAnchorIdx = 0;
+
+    function initGame() {
+        for(let c of cols) for(let r of rows) bag.push(c+r);
+        bag = bag.concat(specialCoords); shuffle(bag);
+
+        const boardEl = document.getElementById('board');
+        for(let i=0; i<100; i++) {
+            let cell = document.createElement('div');
+            cell.id = 'cell-' + i; cell.className = 'cell';
+            
+            let coordText = document.createElement('span');
+            coordText.className = 'coord-text';
+            coordText.innerText = getCoordFromIndex(i);
+            cell.appendChild(coordText);
+            
+            if(specialCoords.includes(getCoordFromIndex(i))) cell.classList.add('special');
+            cell.onclick = () => handleCellClick(i);
+            boardEl.appendChild(cell);
+        }
+        drawTokens(0, 2); drawTokens(1, 2);
+        log("Игра началась! Ваш ход.");
+        updateDeploySelect(); updateUI();
+    }
+
+    function shuffle(array) { array.sort(() => Math.random() - 0.5); }
+    function getIndexFromCoord(coord) { 
+        let letter = coord.match(/[А-Я]+/)[0];
+        let number = coord.match(/[0-9]+/)[0];
+        return (parseInt(number)-1) * 10 + cols.indexOf(letter);
+    }
+    function getCoordFromIndex(index) { return cols[index % 10] + (Math.floor(index / 10) + 1); }
+    function getSector(index) { 
+        let c = index % 10; let r = Math.floor(index / 10);
+        return (c < 5 ? 0 : 1) + (r < 5 ? 0 : 2); 
+    }
+    function log(msg) {
+        const logEl = document.getElementById('game-log');
+        logEl.innerHTML += `<div><span style="color:${currentPlayer===0?'#60a5fa':'#f87171'}">[${players[currentPlayer].name}]</span>: ${msg}</div>`;
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+    
+    function hasActiveShip(pId, typeId) { return boardState.some(c => c && c.owner === pId && c.type === typeId && !c.destroyed); }
+
+    function drawTokens(playerId, count) {
+        for(let i=0; i<count; i++) {
+            if(bag.length === 0) { bag = [...discard]; discard = []; shuffle(bag); }
+            if(bag.length > 0) players[playerId].hand.push(bag.pop());
+        }
+    }
+    
+    function toggleTokenSelection(index) {
+        if(uiMode !== 'IDLE' || currentPlayer === 1) return; 
+        let selIdx = selectedTokens.indexOf(index);
+        selIdx > -1 ? selectedTokens.splice(selIdx, 1) : selectedTokens.push(index);
+        updateHandUI();
+    }
+
+    // Восстановленная логика подсветки
+    function hoverToken(coord, isHover) {
+        if(currentPlayer === 1) return;
+        let cellIdx = getIndexFromCoord(coord);
+        let cellEl = document.getElementById('cell-' + cellIdx);
+        if(cellEl) isHover ? cellEl.classList.add('highlight-target') : cellEl.classList.remove('highlight-target');
+    }
+
+    // Восстановленная и исправленная логика селекта
+    function updateDeploySelect() {
+        let select = document.getElementById('ship-select');
+        select.innerHTML = '';
+        
+        if (players[0].unbuilt.length === 0) {
+            let opt = document.createElement('option');
+            opt.value = ""; opt.innerText = "Флот полностью построен!";
+            select.appendChild(opt);
+        } else {
+            players[0].unbuilt.forEach(shipId => { 
+                let opt = document.createElement('option');
+                opt.value = shipId; opt.innerText = `${shipBlueprints[shipId].icon} ${shipBlueprints[shipId].name} (${shipBlueprints[shipId].size} кл)`;
+                select.appendChild(opt);
+            });
+        }
+        updatePreview();
+    }
+
+    function updatePreview() {
+        let shipId = document.getElementById('ship-select').value;
+        let container = document.getElementById('ship-preview');
+        let desc = document.getElementById('ship-desc');
+        
+        if(!shipId) { container.innerHTML = ''; desc.innerText = ''; return; }
+        
+        let size = shipBlueprints[shipId].size;
+        desc.innerText = "Свойство: " + shipBlueprints[shipId].desc;
+        if(previewAnchorIdx >= size) previewAnchorIdx = 0;
+        
+        container.style.flexDirection = previewDir === 'H' ? 'row' : 'column';
+        container.innerHTML = '';
+        for(let i=0; i<size; i++) {
+            let pCell = document.createElement('div');
+            pCell.className = 'preview-cell' + (i === previewAnchorIdx ? ' is-anchor' : '');
+            pCell.innerText = i === previewAnchorIdx ? shipBlueprints[shipId].icon : '';
+            pCell.onclick = () => { previewAnchorIdx = i; updatePreview(); };
+            container.appendChild(pCell);
+        }
+    }
+    function togglePreviewDir() { previewDir = previewDir === 'H' ? 'V' : 'H'; updatePreview(); }
+
+    function animateHitMiss(idx, type, callback) {
+        let cell = document.getElementById('cell-' + idx);
+        if(!cell) { if(callback) callback(); return; }
+        let fx = document.createElement('div');
+        fx.className = 'anim-effect'; fx.innerText = type === 'hit' ? '💥' : '💦';
+        cell.appendChild(fx);
+        setTimeout(() => { if(cell.contains(fx)) cell.removeChild(fx); if(callback) callback(); }, 800);
+    }
+
+    function rollDiceUI(callback) {
+        const overlay = document.getElementById('dice-overlay');
+        const cube = document.getElementById('dice-cube');
+        const text = document.getElementById('dice-text');
+        overlay.style.display = 'flex'; text.innerText = 'Бросаем кубик...';
+        
+        const faces = [
+            { id: 'HIT', t: '🎯' }, { id: 'HIT', t: '🎯' },
+            { id: 'NORTH', t: '⬆️' }, { id: 'SOUTH', t: '⬇️' },
+            { id: 'EAST', t: '➡️' }, { id: 'WEST', t: '⬅️' }
+        ];
+        
+        let ticks = 0;
+        let interval = setInterval(() => {
+            cube.innerText = faces[Math.floor(Math.random() * faces.length)].t;
+            cube.style.transform = `rotate(${Math.random()*40 - 20}deg) scale(${1 + Math.random()*0.2})`;
+            ticks++;
+            if(ticks > 12) {
+                clearInterval(interval);
+                let result = faces[Math.floor(Math.random() * faces.length)];
+                cube.innerText = result.t; cube.style.transform = 'rotate(0deg) scale(1.2)';
+                text.innerText = result.id === 'HIT' ? '🎯 ЦЕЛЬ!' : 'ОТКЛОНЕНИЕ!';
+                setTimeout(() => { overlay.style.display = 'none'; cube.style.transform = 'scale(1)'; callback(result.id); }, 1200);
+            }
+        }, 100);
+    }
+
+    function executeScoutLogic(callback) {
+        drawTokens(currentPlayer, 2); log("Разведка (добрал 2 жетона)."); 
+        if(hasActiveShip(currentPlayer, 'scout')) {
+            log("<b>Свойство Разведчика!</b> Бросаем кубик...");
+            uiMode = 'ANIMATING'; updateUI();
+            rollDiceUI((roll) => {
+                if(roll === 'HIT') { drawTokens(currentPlayer, 1); log("Разведчик нашел цель! +1 жетон."); } 
+                else { log("Разведчик промахнулся."); }
+                if(callback) callback();
+            });
+        } else {
+            if(callback) callback();
+        }
+    }
+
+    function actionScout() {
+        if(actionsLeft <= 0 || usedActions.includes('SCOUT')) return;
+        usedActions.push('SCOUT'); actionsLeft--; updateUI();
+        executeScoutLogic(() => { uiMode = 'IDLE'; updateUI(); });
+    }
+
+    function actionDeployStart() {
+        if(actionsLeft <= 0 || usedActions.includes('DEPLOY')) return;
+        let shipId = document.getElementById('ship-select').value;
+        if(!shipId) return alert("Все корабли уже построены!");
+        let size = shipBlueprints[shipId].size;
+        if(selectedTokens.length !== size) return alert(`Выберите ровно ${size} жетонов для оплаты!`);
+        uiMode = 'DEPLOYING'; log(`Спуск: Кликните на поле для Якоря (${shipBlueprints[shipId].icon}).`); updateUI();
+    }
+
+    function startFireAction() {
+        if (!usedActions.includes('FIRE') && shotsRemaining === 0) {
+            let limit = players[currentPlayer].shipsOnBoard;
+            if(hasActiveShip(currentPlayer, 'corvette')) { limit += 1; log("<b>Корвет:</b> +1 выстрел!"); }
+            if (limit === 0) { if(currentPlayer===0) alert("Нет выстрелов!"); return false; }
+            usedActions.push('FIRE'); actionsLeft--; shotsRemaining = limit;
+            log(`Стрельба начата. Выстрелов: ${shotsRemaining}`);
+            return true;
+        }
+        return shotsRemaining > 0;
+    }
+
+    function finishShot(callback) {
+        shotsRemaining--;
+        if(shotsRemaining <= 0) { shotsRemaining = 0; log("Все выстрелы израсходованы."); }
+        uiMode = 'IDLE'; updateUI();
+        if(callback) callback();
+    }
+
+    function actionFireAccurate() {
+        if (!startFireAction()) return;
+        if (selectedTokens.length !== 1 && selectedTokens.length !== 2) return alert("Для точного выстрела выберите ровно 1 или 2 жетона!");
+        
+        uiMode = 'ACCURATE_FIRING'; 
+        if (selectedTokens.length === 1) {
+            let t = players[currentPlayer].hand[selectedTokens[0]];
+            log(`Точный выстрел за 1 жетон. Кликните точно в координату <b>${t}</b>.`);
+        } else {
+            let t1 = players[currentPlayer].hand[selectedTokens[0]];
+            let t2 = players[currentPlayer].hand[selectedTokens[1]];
+            log(`Скрещение координат: <b>${t1}</b> и <b>${t2}</b>. Кликните цель (Буква одного + Цифра другого).`); 
+        }
+        updateUI();
+    }
+
+    function actionFireFastStart() {
+        if (!startFireAction()) return;
+        let isFree = hasActiveShip(currentPlayer, 'frigate') && !freeFastShotUsed;
+        if(isFree) {
+            if(selectedTokens.length > 0) return alert("Фрегат дает бесплатный выстрел! Снимите жетоны.");
+            freeFastShotUsed = true; log("<b>Фрегат:</b> Бесплатный выстрел!");
+        } else {
+            if(selectedTokens.length !== 1) return alert("Выберите ровно 1 жетон!");
+        }
+        uiMode = 'FAST_FIRING'; log("Быстрый выстрел. Кликните любую цель."); updateUI();
+    }
+
+    function actionControl() {
+        if(actionsLeft <= 0 || usedActions.includes('CONTROL') || selectedTokens.length === 0) return;
+        executeControlLogic(selectedTokens, () => {
+            selectedTokens = []; usedActions.push('CONTROL'); actionsLeft--; updateUI();
+        });
+    }
+
+    function executeControlLogic(tokensIndices, callback) {
+        let sectorCounts = [ {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0} ];
+        boardState.forEach((cell, idx) => { if(cell && !cell.destroyed) sectorCounts[getSector(idx)][cell.owner]++; });
+
+        let earnedVP = 0; let tokensToRemove = [...tokensIndices];
+        for(let idx of tokensIndices) {
+            let sector = getSector(getIndexFromCoord(players[currentPlayer].hand[idx]));
+            let myCount = sectorCounts[sector][currentPlayer];
+            let enemyCount = sectorCounts[sector][currentPlayer === 0 ? 1 : 0];
+
+            if(myCount > enemyCount) { earnedVP += 2; log(`Успешный контроль сектора. +2 ПО!`); } 
+            else { log(`Контроль сектора провален. (Клеток: ${myCount} против ${enemyCount}).`); }
+        }
+
+        tokensToRemove.sort((a,b)=>b-a).forEach(idx => { discard.push(players[currentPlayer].hand[idx]); players[currentPlayer].hand.splice(idx, 1); });
+        players[currentPlayer].vp += earnedVP; 
+        if(callback) callback();
+    }
+
+    function showRerollDialog(callback) {
+        if(currentPlayer === 1) { setTimeout(() => callback(true), 500); } 
+        else { document.getElementById('reroll-overlay').style.display = 'flex'; rerollCallback = callback; }
+    }
+    function resolveReroll(choice) { document.getElementById('reroll-overlay').style.display = 'none'; if(rerollCallback) { rerollCallback(choice); rerollCallback = null; } }
+
+    function executeDeployLogic(shipId, dir, anchorOffset, startIdx, chosenTokensCoords, callback) {
+        let size = shipBlueprints[shipId].size;
+        let cellsToOccupy = [];
+        let realStart = startIdx - (dir === 'H' ? anchorOffset : anchorOffset * 10);
+        
+        for(let i=0; i<size; i++) {
+            let targetIdx = realStart + (dir === 'H' ? i : i*10);
+            if(dir === 'H' && Math.floor(targetIdx/10) !== Math.floor(realStart/10)) return false; 
+            if(targetIdx < 0 || targetIdx > 99 || boardState[targetIdx] !== null) return false; 
+            cellsToOccupy.push(targetIdx);
+        }
+
+        shipsBuiltTotal++;
+        let newShipId = 's' + shipsBuiltTotal;
+        cellsToOccupy.forEach(cIdx => {
+            boardState[cIdx] = { owner: currentPlayer, shipId: newShipId, type: shipId, destroyed: false, isAnchor: (cIdx === startIdx) };
+            if(specialCoords.includes(getCoordFromIndex(cIdx))) { players[currentPlayer].vp += 1; log(`Особая клетка! +1 ПО.`); }
+        });
+
+        let handTokens = players[currentPlayer].hand;
+        chosenTokensCoords.forEach(coord => {
+            let idx = handTokens.indexOf(coord);
+            if(idx > -1) { discard.push(handTokens[idx]); handTokens.splice(idx, 1); }
+        });
+
+        players[currentPlayer].shipsOnBoard++; 
+        players[currentPlayer].unbuilt = players[currentPlayer].unbuilt.filter(s => s !== shipId);
+        log(`Спущен корабль: ${shipBlueprints[shipId].icon} ${shipBlueprints[shipId].name}.`); 
+        
+        if(!usedActions.includes('DEPLOY')) usedActions.push('DEPLOY');
+        if(callback) callback(true);
+        return true;
+    }
+
+    function executeFastShotLogic(targetIdx, callback) {
+        uiMode = 'ANIMATING'; updateUI();
+        let resolveShot = (roll) => {
+            log(`Кубик: <b>${roll}</b>`);
+            let finalIdx = targetIdx;
+            if(roll==='NORTH') finalIdx-=10; if(roll==='SOUTH') finalIdx+=10;
+            if(roll==='EAST') { finalIdx+=1; if(finalIdx%10 === 0) finalIdx = -1; }
+            if(roll==='WEST') { finalIdx-=1; if((finalIdx+1)%10 === 0) finalIdx = -1; }
+            
+            if(finalIdx >= 0 && finalIdx <= 99) {
+                let isHit = boardState[finalIdx] && !boardState[finalIdx].destroyed;
+                animateHitMiss(finalIdx, isHit ? 'hit' : 'miss', () => { processHit(finalIdx, true); finishShot(callback); });
+            } else {
+                log("Мимо поля."); finishShot(callback);
+            }
+        };
+
+        rollDiceUI((roll) => {
+            if(roll !== 'HIT' && hasActiveShip(currentPlayer, 'submarine')) {
+                showRerollDialog((yes) => {
+                    if(yes) { log("<b>Подлодка:</b> Переброс кубика!"); rollDiceUI((nRoll) => resolveShot(nRoll)); } 
+                    else resolveShot(roll);
+                });
+            } else { resolveShot(roll); }
+        });
+    }
+
+    // --- КЛИК ПО КЛЕТКАМ ---
+    function handleCellClick(index) {
+        if(currentPlayer === 1) return; 
+
+        if(uiMode === 'DEPLOYING') {
+            let shipId = document.getElementById('ship-select').value;
+            let anchorCoord = getCoordFromIndex(index);
+            let chosenCoords = selectedTokens.map(idx => players[currentPlayer].hand[idx]);
+            
+            if(!chosenCoords.includes(anchorCoord)) return alert("Клетка Якоря должна совпадать с оплаченным жетоном!");
+
+            if(executeDeployLogic(shipId, previewDir, previewAnchorIdx, index, chosenCoords)) {
+                selectedTokens = []; uiMode = 'IDLE'; actionsLeft--; 
+                updateDeploySelect(); updateUI();
+            } else { alert("Корабль не помещается!"); }
+
+        } 
+        else if (uiMode === 'ACCURATE_FIRING') {
+            let targetCoord = getCoordFromIndex(index);
+
+            if (selectedTokens.length === 1) {
+                let tCoord = players[currentPlayer].hand[selectedTokens[0]];
+                if (targetCoord !== tCoord) {
+                    return alert(`Промах! Для 1 жетона цель должна быть точно ${tCoord}.`);
+                }
+                discard.push(tCoord); players[currentPlayer].hand.splice(selectedTokens[0], 1); selectedTokens = [];
+                log(`Точный выстрел (1 жетон) в ${targetCoord}!`);
+            } else {
+                let t1 = players[currentPlayer].hand[selectedTokens[0]];
+                let t2 = players[currentPlayer].hand[selectedTokens[1]];
+                
+                // Парсим координаты 10х10 правильно
+                let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
+                let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
+                let trgL = targetCoord.match(/[А-Я]+/)[0]; let trgN = targetCoord.match(/[0-9]+/)[0];
+
+                let isValid = (trgL === t1L && trgN === t2N) || (trgL === t2L && trgN === t1N);
+
+                if (!isValid) {
+                    return alert(`Промах! Цель ${targetCoord} не может быть составлена из жетонов ${t1} и ${t2}.`);
+                }
+                selectedTokens.sort((a,b)=>b-a).forEach(idx => {
+                    discard.push(players[currentPlayer].hand[idx]); players[currentPlayer].hand.splice(idx, 1);
+                });
+                selectedTokens = []; 
+                log(`Точный выстрел (скрещение) в ${targetCoord}!`);
+            }
+            
+            uiMode = 'ANIMATING'; updateUI();
+            let isHit = boardState[index] && !boardState[index].destroyed;
+            animateHitMiss(index, isHit ? 'hit' : 'miss', () => { processHit(index, false); finishShot(); });
+        }
+        else if (uiMode === 'FAST_FIRING') {
+            if(selectedTokens.length > 0) {
+                let tokenIdx = selectedTokens[0]; discard.push(players[currentPlayer].hand[tokenIdx]); players[currentPlayer].hand.splice(tokenIdx, 1); selectedTokens = [];
+            }
+            executeFastShotLogic(index);
+        }
+    }
+
+    function processHit(idx, isFastShot) {
+        let cell = boardState[idx];
+        if(!cell || cell.destroyed) return log("Плюх.");
+        
+        if (cell.type === 'destroyer' && isFastShot) { log("💦 <b>Эсминец:</b> Увернулся от быстрого выстрела!"); return; }
+        
+        cell.destroyed = true; players[currentPlayer].vp += 1; log("💥 ПОПАДАНИЕ! +1 ПО.");
+
+        let shipId = cell.shipId;
+        let isFullyDestroyed = true;
+        boardState.forEach(c => { if(c && c.shipId === shipId && !c.destroyed) isFullyDestroyed = false; });
+
+        if(isFullyDestroyed) {
+            players[currentPlayer].vp += 1; players[cell.owner].shipsOnBoard--;
+            log(`КОРАБЛЬ УНИЧТОЖЕН! +1 ПО.`);
+            if (hasActiveShip(currentPlayer, 'battleship') && cell.owner !== currentPlayer) {
+                players[currentPlayer].vp += 1; drawTokens(currentPlayer, 1);
+                log("⚓ <b>Линкор:</b> +1 ПО и +1 жетон за фраг!");
+            }
+            boardState.forEach((c, i) => { if(c && c.shipId === shipId) boardState[i] = null; });
+        }
+        updateBoardUI();
+    }
+
+    // --- УМНЫЙ БОТ ---
+    function getEnemyShipCoords() {
+        let coords = [];
+        boardState.forEach((c, i) => { if (c && c.owner === 0 && !c.destroyed) coords.push(getCoordFromIndex(i)); });
+        return coords;
+    }
+
+    function playBotTurn() {
+        if(players[0].vp >= 21 || players[1].vp >= 21) return;
+        uiMode = 'ANIMATING'; updateUI(); 
+        
+        setTimeout(() => {
+            if(shotsRemaining > 0) { botDoShoot(); return; }
+            if(actionsLeft <= 0) { endTurn(); return; }
+
+            if(!usedActions.includes('CONTROL')) {
+                let sectorCounts = [ {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0} ];
+                boardState.forEach((cell, idx) => { if(cell && !cell.destroyed) sectorCounts[getSector(idx)][cell.owner]++; });
+                let tokensToUse = [];
+                players[1].hand.forEach((token, idx) => {
+                    let s = getSector(getIndexFromCoord(token));
+                    if (sectorCounts[s][1] > sectorCounts[s][0]) tokensToUse.push(idx);
+                });
+                
+                if(tokensToUse.length > 0) {
+                    executeControlLogic(tokensToUse, () => { usedActions.push('CONTROL'); actionsLeft--; playBotTurn(); });
+                    return;
+                }
+            }
+
+            let enemyCoords = getEnemyShipCoords();
+            let canShoot = !usedActions.includes('FIRE') && players[1].shipsOnBoard > 0 && enemyCoords.length > 0;
+            
+            if (canShoot && players[1].hand.length >= 1) {
+                let hasAccurateTarget = false;
+                for(let eC of enemyCoords) {
+                    if(players[1].hand.includes(eC)) { hasAccurateTarget = true; break; }
+                    
+                    if(players[1].hand.length >= 2) {
+                        let ecL = eC.match(/[А-Я]+/)[0]; let ecN = eC.match(/[0-9]+/)[0];
+
+                        for(let i=0; i<players[1].hand.length; i++) {
+                            for(let j=i+1; j<players[1].hand.length; j++) {
+                                let t1 = players[1].hand[i]; let t2 = players[1].hand[j];
+                                let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
+                                let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
+
+                                if ((t1L === ecL && t2N === ecN) || (t2L === ecL && t1N === ecN)) {
+                                    hasAccurateTarget = true; break;
+                                }
+                            }
+                            if(hasAccurateTarget) break;
+                        }
+                    }
+                    if(hasAccurateTarget) break;
+                }
+                if (hasAccurateTarget) { startFireAction(); playBotTurn(); return; }
+            }
+
+            if(!usedActions.includes('DEPLOY') && players[1].unbuilt.length > 0) {
+                let affordable = players[1].unbuilt.filter(s => shipBlueprints[s].size <= players[1].hand.length);
+                if(affordable.length > 0) {
+                    let shipId = affordable[Math.floor(Math.random() * affordable.length)];
+                    let size = shipBlueprints[shipId].size;
+                    let handCopy = [...players[1].hand]; shuffle(handCopy);
+                    let paymentTokens = handCopy.slice(0, size);
+
+                    let placed = false;
+                    for(let anchorCoord of paymentTokens) {
+                        let startIdx = getIndexFromCoord(anchorCoord);
+                        for(let dir of ['H', 'V']) {
+                            for(let aOffset = 0; aOffset < size; aOffset++) {
+                                if(executeDeployLogic(shipId, dir, aOffset, startIdx, paymentTokens)) {
+                                    actionsLeft--; placed = true; break;
+                                }
+                            }
+                            if(placed) break;
+                        }
+                        if(placed) break;
+                    }
+                    if(placed) { playBotTurn(); return; }
+                }
+            }
+
+            if (canShoot) {
+                let hasTokensForFast = players[1].hand.length > 0;
+                let freeFrigate = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
+                if (hasTokensForFast || freeFrigate) { startFireAction(); playBotTurn(); return; }
+            }
+
+            if(!usedActions.includes('SCOUT')) {
+                usedActions.push('SCOUT'); actionsLeft--;
+                executeScoutLogic(() => { playBotTurn(); });
+                return;
+            }
+
+            actionsLeft--; playBotTurn();
+
+        }, 1500);
+    }
+
+    function botDoShoot() {
+        let enemyCoords = getEnemyShipCoords();
+        if(enemyCoords.length === 0) { log("Вражеских кораблей нет. Бот прекращает стрельбу."); shotsRemaining = 0; playBotTurn(); return; }
+
+        let accurateTargetCoord = null;
+        let tokenToDiscard = null;
+        let tokensToDiscard = null;
+
+        for(let eC of enemyCoords) {
+            let exactIdx = players[1].hand.indexOf(eC);
+            if(exactIdx > -1) {
+                accurateTargetCoord = eC; tokenToDiscard = exactIdx; break;
+            }
+            
+            let ecL = eC.match(/[А-Я]+/)[0]; let ecN = eC.match(/[0-9]+/)[0];
+
+            if(players[1].hand.length >= 2) {
+                for(let i=0; i<players[1].hand.length; i++) {
+                    for(let j=i+1; j<players[1].hand.length; j++) {
+                        let t1 = players[1].hand[i]; let t2 = players[1].hand[j];
+                        let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
+                        let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
+
+                        if ((t1L === ecL && t2N === ecN) || (t2L === ecL && t1N === ecN)) {
+                            accurateTargetCoord = eC; tokensToDiscard = [i, j]; break;
+                        }
+                    }
+                    if(accurateTargetCoord) break;
+                }
+            }
+            if(accurateTargetCoord) break;
+        }
+
+        if(accurateTargetCoord) {
+            let targetIdx = getIndexFromCoord(accurateTargetCoord);
+            if (tokenToDiscard !== null) {
+                let tokenCoord = players[1].hand[tokenToDiscard];
+                discard.push(tokenCoord); players[1].hand.splice(tokenToDiscard, 1);
+                log(`<b>Бот:</b> ТОЧНЫЙ выстрел в ${accurateTargetCoord} (прямое совпадение)!`);
+            } else {
+                let t1_coord = players[1].hand[tokensToDiscard[0]];
+                let t2_coord = players[1].hand[tokensToDiscard[1]];
+                tokensToDiscard.sort((a,b)=>b-a).forEach(idx => { discard.push(players[1].hand[idx]); players[1].hand.splice(idx, 1); });
+                log(`<b>Бот:</b> ТОЧНЫЙ выстрел в ${accurateTargetCoord} (скрещение ${t1_coord} и ${t2_coord})!`);
+            }
+            let isHit = boardState[targetIdx] && !boardState[targetIdx].destroyed;
+            animateHitMiss(targetIdx, isHit ? 'hit' : 'miss', () => { processHit(targetIdx, false); finishShot(() => playBotTurn()); });
+            return;
+        }
+
+        let isFree = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
+        if(!isFree && players[1].hand.length === 0) { shotsRemaining = 0; playBotTurn(); return; }
+
+        let targetCoord = enemyCoords[Math.floor(Math.random() * enemyCoords.length)];
+        let targetIdx = getIndexFromCoord(targetCoord);
+        
+        if(isFree) { freeFastShotUsed = true; log("<b>Бот:</b> Быстрый выстрел (Фрегат) по " + targetCoord); } 
+        else {
+            let rIdx = Math.floor(Math.random() * players[1].hand.length);
+            discard.push(players[1].hand[rIdx]); players[1].hand.splice(rIdx, 1);
+            log("<b>Бот:</b> Быстрый выстрел (1 жетон) по " + targetCoord);
+        }
+
+        executeFastShotLogic(targetIdx, () => { playBotTurn(); });
+    }
+
+    function endTurn() { 
+        currentPlayer = currentPlayer === 0 ? 1 : 0; 
+        actionsLeft = 2; usedActions = []; selectedTokens = []; uiMode = 'IDLE'; shotsRemaining = 0;
+        freeFastShotUsed = false;
+        log(`<b>--- Ход: ${players[currentPlayer].name} ---</b>`); 
+        updateDeploySelect(); updateUI(); 
+
+        if(currentPlayer === 1) playBotTurn();
+    }
+
+    function updateUI() {
+        let turnText = document.getElementById('current-player-text');
+        turnText.innerText = `Ход: ${players[currentPlayer].name}`;
+        turnText.style.color = currentPlayer === 0 ? '#60a5fa' : '#f87171';
+        
+        document.getElementById('turn-info').className = `info-panel ${players[currentPlayer].colorClass}`;
+        document.getElementById('actions-left').innerText = actionsLeft;
+        document.getElementById('shots-left-text').innerText = shotsRemaining;
+
+        document.getElementById('vp-p0').innerText = players[0].vp; document.getElementById('ships-p0').innerText = players[0].shipsOnBoard;
+        document.getElementById('vp-p1').innerText = players[1].vp; document.getElementById('ships-p1').innerText = players[1].shipsOnBoard;
+
+        let disabledAll = (currentPlayer === 1 || uiMode !== 'IDLE' && uiMode !== 'ACCURATE_FIRING');
+        
+        document.getElementById('btn-scout').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('SCOUT'));
+        document.getElementById('btn-deploy').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('DEPLOY') || players[0].unbuilt.length === 0);
+        document.getElementById('btn-control').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('CONTROL'));
+        document.getElementById('btn-end-turn').disabled = disabledAll;
+
+        let btnFast = document.getElementById('btn-fire-fast');
+        if (hasActiveShip(0, 'frigate') && !freeFastShotUsed) btnFast.innerText = 'Быстрый 🎲 (Фрегат)';
+        else btnFast.innerText = 'Быстрый 🎲 (1ж)';
+
+        let canFire = (!usedActions.includes('FIRE') && actionsLeft > 0 && players[0].shipsOnBoard > 0) || shotsRemaining > 0;
+        
+        document.getElementById('btn-fire-acc').disabled = disabledAll || !canFire || players[0].hand.length < 1;
+        btnFast.disabled = disabledAll || !canFire;
+        document.getElementById('btn-rotate').disabled = disabledAll;
+
+        updateHandUI(); updateBoardUI();
+        if(players[0].vp >= 21) { setTimeout(()=>alert("ВЫ ПОБЕДИЛИ!"), 100); }
+        if(players[1].vp >= 21) { setTimeout(()=>alert("БОТ ПОБЕДИЛ!"), 100); }
+    }
+
+    function updateHandUI() {
+        const handEl = document.getElementById('player-hand'); handEl.innerHTML = '';
+        players[0].hand.forEach((token, idx) => { 
+            let el = document.createElement('div');
+            el.className = 'token' + (selectedTokens.includes(idx) ? ' selected' : '') + (specialCoords.includes(token) ? ' special' : '');
+            el.innerText = token;
+            el.onclick = () => toggleTokenSelection(idx);
+            el.onmouseenter = () => hoverToken(token, true);
+            el.onmouseleave = () => hoverToken(token, false);
+            handEl.appendChild(el);
+        });
+        
+        if(players[1].hand.length > 0) {
+            let botInfo = document.createElement('div');
+            botInfo.style.width = '100%'; botInfo.style.marginTop = '10px'; botInfo.style.color = '#f87171';
+            botInfo.innerText = `Жетонов в руке Бота: ${players[1].hand.length}`;
+            handEl.appendChild(botInfo);
+        }
+    }
+
+    function updateBoardUI() {
+        for(let i=0; i<100; i++) {
+            let cell = document.getElementById('cell-'+i);
+            
+            // Важное исправление иконок: сохраняем только текст координат перед рендером
+            cell.innerHTML = `<span class="coord-text">${getCoordFromIndex(i)}</span>`;
+            cell.className = 'cell' + (specialCoords.includes(getCoordFromIndex(i)) ? ' special' : '');
+            
+            if(boardState[i]) {
+                cell.classList.add(`ship-p${boardState[i].owner}`);
+                
+                // Эмодзи рисуется ТОЛЬКО если это якорь и он не подбит
+                if(boardState[i].isAnchor && !boardState[i].destroyed) {
+                    let iconSpan = document.createElement('span');
+                    iconSpan.className = 'ship-icon-display';
+                    iconSpan.innerText = shipBlueprints[boardState[i].type].icon;
+                    cell.appendChild(iconSpan);
+                }
+                if(boardState[i].destroyed) cell.innerHTML += `<div class="damage-marker"></div>`;
+            }
+        }
+    }
+    
+    initGame();
+</script>
+</body>
+</html>
