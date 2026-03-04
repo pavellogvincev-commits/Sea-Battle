@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Tactical Battleship Prototype v1.8.1 (Stable Multiplayer)</title>
+    <title>Tactical Battleship Prototype v1.8.2 (Bot Fix)</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #1a1a1a; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 20px; user-select: none;}
         h1, h2, h3, h4 { margin-top: 0; }
@@ -47,7 +47,6 @@
         .head-cell { z-index: 15 !important; }
         .hit-cell { z-index: 25 !important; }
 
-        /* Фоны под кораблями для страховки (если картинка не прогрузится) */
         .ship-p0 { background-color: rgba(59, 130, 246, 0.4); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         .ship-p1 { background-color: rgba(239, 68, 68, 0.4); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         .ship-p2 { background-color: rgba(234, 179, 8, 0.4); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
@@ -176,7 +175,6 @@
 </div>
 
 <script>
-    // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ ---
     const cols = ['А','Б','В','Г','Д','Е','Ж','З','И','К'];
     const rows = ['1','2','3','4','5','6','7','8','9','10'];
     const specialCoords = ['Б2','В3','Г4','Ж2','З3','И4','Б7','В8','Г9','Ж7','З8','И9'];
@@ -190,7 +188,7 @@
         'battleship': { name: 'Линкор', size: 4, desc: 'Потопление врага = +1 ПО и +1 жетон.' }
     };
     const defaultFleet = ['scout', 'corvette', 'submarine', 'destroyer', 'frigate', 'battleship'];
-    const playerColors = ['#60a5fa', '#f87171', '#facc15', '#34d399']; // Синий, Красный, Желтый, Зеленый
+    const playerColors = ['#60a5fa', '#f87171', '#facc15', '#34d399'];
 
     let bag = []; let discard = []; let boardState = Array(100).fill(null);
     let players = [];
@@ -221,13 +219,11 @@
         sb.style.display = 'flex';
         document.getElementById('game-container').style.display = 'flex';
         
-        // Создаем игроков
         players.push({ id: 0, name: 'ВЫ', colorClass: 'p0', colorHex: playerColors[0], vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] });
         for(let i = 1; i < numPlayers; i++) {
             players.push({ id: i, name: `БОТ ${i}`, colorClass: `p${i}`, colorHex: playerColors[i], vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] });
         }
 
-        // Рендер табло
         sb.innerHTML = '';
         players.forEach(p => {
             sb.innerHTML += `
@@ -238,14 +234,12 @@
                 </div>`;
         });
 
-        // Создаем мешок
         for(let c of cols) for(let r of rows) bag.push(c+r);
         bag = bag.concat(specialCoords); 
         shuffle(bag);
 
-        // Создаем поле
         const boardEl = document.getElementById('board');
-        boardEl.innerHTML = ''; // Очистка на всякий случай
+        boardEl.innerHTML = ''; 
         for(let i=0; i<100; i++) {
             let cell = document.createElement('div');
             cell.id = 'cell-' + i; cell.className = 'cell';
@@ -445,7 +439,6 @@
                 if(boardState[i].isHead) {
                     cell.classList.add('head-cell');
                     let img = document.createElement('img');
-                    // Флот 1 для Игрока, Флот 2,3,4 для Ботов
                     img.src = `assets/fleet${boardState[i].owner + 1}/${boardState[i].type}.png`;
                     img.className = 'ship-image';
                     let size = shipBlueprints[boardState[i].type].size;
@@ -461,11 +454,41 @@
         }
     }
 
-    // --- ЛОГИКА ДЕЙСТВИЙ ИГРОКА ---
-    function actionScout() {
-        if(isGameOver || actionsLeft <= 0 || usedActions.includes('SCOUT')) return;
-        usedActions.push('SCOUT'); actionsLeft--; updateUI();
-        drawTokens(currentPlayer, 2); log("Разведка (добрал 2 жетона)."); 
+    // --- ОБЩАЯ ЛОГИКА ДЕЙСТВИЙ (ИГРОК И БОТ) ---
+    function animateHitMiss(idx, type, callback) {
+        let cell = document.getElementById('cell-' + idx);
+        if(!cell) { if(callback) callback(); return; }
+        let fx = document.createElement('div');
+        fx.className = 'anim-effect'; fx.innerText = type === 'hit' ? '💥' : '💦';
+        cell.appendChild(fx);
+        setTimeout(() => { if(cell.contains(fx)) cell.removeChild(fx); if(callback) callback(); }, 800);
+    }
+
+    function rollDiceUI(callback) {
+        const overlay = document.getElementById('dice-overlay');
+        const cube = document.getElementById('dice-cube');
+        overlay.style.display = 'flex';
+        const faces = [{ id: 'HIT', t: '🎯' }, { id: 'HIT', t: '🎯' }, { id: 'NORTH', t: '⬆️' }, { id: 'SOUTH', t: '⬇️' }, { id: 'EAST', t: '➡️' }, { id: 'WEST', t: '⬅️' }];
+        let ticks = 0;
+        let interval = setInterval(() => {
+            cube.innerText = faces[Math.floor(Math.random() * faces.length)].t;
+            cube.style.transform = `rotate(${Math.random()*40 - 20}deg) scale(${1 + Math.random()*0.2})`;
+            ticks++;
+            if(ticks > 12) {
+                clearInterval(interval);
+                let result = faces[Math.floor(Math.random() * faces.length)];
+                cube.innerText = result.t; cube.style.transform = 'rotate(0deg) scale(1.2)';
+                document.getElementById('dice-text').innerText = result.id === 'HIT' ? '🎯 ЦЕЛЬ!' : 'ОТКЛОНЕНИЕ!';
+                setTimeout(() => { overlay.style.display = 'none'; cube.style.transform = 'scale(1)'; callback(result.id); }, 1200);
+            }
+        }, 100);
+    }
+
+    // ВАЖНО: Восстановленная функция Разведки для безопасного вызова Ботом
+    function executeScoutLogic(callback) {
+        drawTokens(currentPlayer, 2); 
+        log("Разведка (добрал 2 жетона)."); 
+        
         if(hasActiveShip(currentPlayer, 'scout')) {
             log("<b>Свойство Разведчика!</b> Бросаем кубик...");
             uiMode = 'ANIMATING'; updateUI();
@@ -473,10 +496,18 @@
                 if(roll === 'HIT') { drawTokens(currentPlayer, 1); log("Разведчик нашел цель! +1 жетон."); } 
                 else { log("Разведчик промахнулся."); }
                 uiMode = 'IDLE'; updateUI();
+                if(callback) callback();
             });
         } else {
             uiMode = 'IDLE'; updateUI();
+            if(callback) callback();
         }
+    }
+
+    function actionScout() {
+        if(isGameOver || actionsLeft <= 0 || usedActions.includes('SCOUT')) return;
+        usedActions.push('SCOUT'); actionsLeft--; updateUI();
+        executeScoutLogic(() => {}); // Игрок не требует колбека
     }
 
     function actionDeployStart() {
@@ -595,15 +626,6 @@
         if(!usedActions.includes('DEPLOY')) usedActions.push('DEPLOY');
         checkWin();
         if(callback) callback(true); return true;
-    }
-
-    function animateHitMiss(idx, type, callback) {
-        let cell = document.getElementById('cell-' + idx);
-        if(!cell) { if(callback) callback(); return; }
-        let fx = document.createElement('div');
-        fx.className = 'anim-effect'; fx.innerText = type === 'hit' ? '💥' : '💦';
-        cell.appendChild(fx);
-        setTimeout(() => { if(cell.contains(fx)) cell.removeChild(fx); if(callback) callback(); }, 800);
     }
 
     function executeFastShotLogic(targetIdx, callback) {
@@ -799,7 +821,10 @@
 
             // 5. Разведка
             if(!usedActions.includes('SCOUT')) {
-                usedActions.push('SCOUT'); actionsLeft--; executeScoutLogic(() => playBotTurn()); return;
+                usedActions.push('SCOUT'); actionsLeft--; 
+                // Вызов исправленной функции
+                executeScoutLogic(() => playBotTurn()); 
+                return;
             }
 
             actionsLeft--; playBotTurn();
