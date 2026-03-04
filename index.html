@@ -2,24 +2,34 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Tactical Battleship Prototype v1.8 (Multiplayer)</title>
+    <title>Tactical Battleship Prototype v1.8.1 (Stable Multiplayer)</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 20px; user-select: none;}
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #1a1a1a; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 20px; user-select: none;}
         h1, h2, h3, h4 { margin-top: 0; }
         
-        #global-scoreboard { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; background: #111; padding: 15px; border-radius: 8px; border: 2px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5); width: 100%; max-width: 1000px;}
+        /* Стартовый экран */
+        .overlay { display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 100; align-items: center; justify-content: center; flex-direction: column;}
+        .dialog-box { background: #2a2a2a; padding: 30px; border-radius: 12px; border: 2px solid #ffcc00; text-align: center; max-width: 450px; box-shadow: 0 0 30px rgba(0,0,0,0.8);}
+        .dialog-box h2 { color: #ffcc00; margin-bottom: 20px; font-size: 28px;}
+        .dialog-box p { color: #ccc; margin-bottom: 20px; font-size: 16px;}
+        .dialog-box button { background: #10b981; color: #fff; border: none; padding: 12px 20px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-bottom: 10px; transition: background 0.2s;}
+        .dialog-box button:hover { background: #059669; }
+
+        /* Табло */
+        #global-scoreboard { display: none; justify-content: center; gap: 15px; flex-wrap: wrap; background: #222; padding: 15px; border-radius: 8px; border: 2px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5); width: 100%; max-width: 1000px;}
         .player-score { text-align: center; padding: 10px 15px; border-radius: 6px; min-width: 150px; flex: 1;}
         .player-score h2 { margin: 0 0 10px 0; font-size: 1.2rem;}
         .player-score p { margin: 5px 0; font-size: 14px; font-weight: bold;}
         
-        .score-p0 { background: rgba(59, 130, 246, 0.2); border: 2px solid #3b82f6; color: #60a5fa;}
-        .score-p1 { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; color: #f87171;}
-        .score-p2 { background: rgba(234, 179, 8, 0.2); border: 2px solid #eab308; color: #facc15;}
-        .score-p3 { background: rgba(16, 185, 129, 0.2); border: 2px solid #10b981; color: #34d399;}
+        .score-p0 { background: rgba(59, 130, 246, 0.15); border: 2px solid #3b82f6; color: #60a5fa;}
+        .score-p1 { background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; color: #f87171;}
+        .score-p2 { background: rgba(234, 179, 8, 0.15); border: 2px solid #eab308; color: #facc15;}
+        .score-p3 { background: rgba(16, 185, 129, 0.15); border: 2px solid #10b981; color: #34d399;}
 
-        #game-container { display: flex; gap: 30px; justify-content: center; max-width: 1200px; display: none; } /* Скрыто до старта */
+        /* Игровое поле */
+        #game-container { display: none; gap: 30px; justify-content: center; max-width: 1200px; }
         #board-section { display: flex; flex-direction: column; align-items: center;}
-        #ui-section { width: 450px; background: #333; padding: 20px; border-radius: 8px;}
+        #ui-section { width: 450px; background: #333; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);}
         
         #board { display: grid; grid-template-columns: repeat(10, 45px); grid-template-rows: repeat(10, 45px); gap: 2px; background: #555; border: 4px solid #444; position: relative;}
         #board::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 4px; background: #ffcc00; transform: translateY(-50%); z-index: 5; pointer-events: none;}
@@ -29,7 +39,7 @@
         .cell:hover { background: #2a6b9e; }
         .cell.special { box-shadow: inset 0 0 10px rgba(255, 215, 0, 0.8); background: #1e5a85;}
         .cell.highlight-target { background: #10b981 !important; outline: 3px solid #fff; z-index: 10;}
-        .cell.deploy-highlight { background: rgba(16, 185, 129, 0.4) !important; box-shadow: inset 0 0 15px #10b981; outline: 2px dashed #10b981; z-index: 8;}
+        .cell.deploy-highlight { background: rgba(16, 185, 129, 0.5) !important; box-shadow: inset 0 0 15px #10b981; outline: 2px dashed #10b981; z-index: 8;}
         
         .coord-text { position: absolute; top: 2px; left: 3px; font-size: 9px; color: rgba(255,255,255,0.4); pointer-events: none; z-index: 10;}
         
@@ -37,42 +47,38 @@
         .head-cell { z-index: 15 !important; }
         .hit-cell { z-index: 25 !important; }
 
-        .ship-p0 { background-color: rgba(59, 130, 246, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
-        .ship-p1 { background-color: rgba(239, 68, 68, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
-        .ship-p2 { background-color: rgba(234, 179, 8, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
-        .ship-p3 { background-color: rgba(16, 185, 129, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        /* Фоны под кораблями для страховки (если картинка не прогрузится) */
+        .ship-p0 { background-color: rgba(59, 130, 246, 0.4); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .ship-p1 { background-color: rgba(239, 68, 68, 0.4); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .ship-p2 { background-color: rgba(234, 179, 8, 0.4); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .ship-p3 { background-color: rgba(16, 185, 129, 0.4); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         
-        .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 30; pointer-events: none;}
+        .damage-marker { position: absolute; width: 26px; height: 26px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 30; pointer-events: none; box-shadow: 0 0 5px #000;}
         
         .anim-effect { position: absolute; font-size: 35px; z-index: 40; animation: popUp 0.8s ease-out forwards; pointer-events: none; }
         @keyframes popUp { 0% { transform: scale(0); opacity: 1; } 50% { transform: scale(1.5); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
 
-        .hand { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; min-height: 40px; background: #222; padding: 10px; border-radius: 4px;}
-        .token { background: #eee; color: #222; padding: 4px 8px; border-radius: 4px; font-weight: bold; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; font-size: 13px;}
+        /* Интерфейс управления */
+        .hand { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; min-height: 40px; background: #222; padding: 10px; border-radius: 4px; border: 1px solid #444;}
+        .token { background: #eee; color: #222; padding: 5px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; font-size: 13px;}
         .token:hover { transform: translateY(-2px); }
         .token.selected { border-color: #ffcc00; background: #fffacd; box-shadow: 0 0 8px rgba(255, 204, 0, 0.8);}
         
-        button { background: #4b5563; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 5px; font-weight: bold; transition: background 0.2s;}
-        button:hover:not(:disabled) { background: #6b7280; }
-        button:disabled { background: #374151; color: #666; cursor: not-allowed;}
-        .info-panel { margin-bottom: 20px; padding: 15px; background: #444; border-radius: 4px;}
-        .log { height: 180px; overflow-y: auto; background: #111; padding: 10px; font-size: 13px; font-family: monospace; border-radius: 4px;}
-        .action-group { border: 1px solid #555; padding: 10px; margin-bottom: 10px; border-radius: 4px;}
+        .action-btn { background: #4b5563; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 5px; font-weight: bold; transition: background 0.2s;}
+        .action-btn:hover:not(:disabled) { background: #6b7280; }
+        .action-btn:disabled { background: #374151; color: #666; cursor: not-allowed;}
+        
+        .info-panel { margin-bottom: 20px; padding: 15px; background: #444; border-radius: 4px; border: 1px solid #555;}
+        .log { height: 180px; overflow-y: auto; background: #111; padding: 10px; font-size: 13px; font-family: monospace; border-radius: 4px; border: 1px solid #333;}
+        .action-group { border: 1px solid #555; padding: 12px; margin-bottom: 10px; border-radius: 6px; background: #2a2a2a;}
         .action-group h4 { margin: 0 0 10px 0; color: #ccc;}
         
-        #ship-preview-container { display: flex; flex-direction: column; align-items: center; background: #222; padding: 10px; border-radius: 4px; margin-bottom: 10px;}
+        #ship-preview-container { display: flex; flex-direction: column; align-items: center; background: #1a1a1a; padding: 10px; border-radius: 4px; margin-bottom: 10px; border: 1px solid #333;}
         #ship-preview { display: flex; gap: 2px; margin: 10px 0; }
         .preview-cell { width: 30px; height: 30px; background: #888; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative;}
         .preview-cell.is-anchor { background: #ffcc00; border-color: #d97706;}
 
-        /* Стартовый и финальный экраны */
-        .overlay { display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; flex-direction: column;}
-        .dialog-box { background: #333; padding: 30px; border-radius: 8px; border: 2px solid #ffcc00; text-align: center; max-width: 400px; box-shadow: 0 0 20px rgba(0,0,0,0.8);}
-        .dialog-box h2 { color: #ffcc00; margin-bottom: 20px;}
-        .dialog-box button { background: #10b981; font-size: 16px; margin: 5px 0; }
-        
         #dice-cube { font-size: 80px; background: #fff; width: 150px; height: 150px; display: flex; align-items: center; justify-content: center; border-radius: 25px; box-shadow: 0 0 30px #ffcc00; color: #000; transition: transform 0.1s;}
-        #dice-text { margin-top: 20px; font-size: 24px; color: #ffcc00; font-weight: bold; text-align: center;}
     </style>
 </head>
 <body>
@@ -81,10 +87,10 @@
 <div id="start-overlay" class="overlay">
     <div class="dialog-box">
         <h2>Тактический Морской Бой</h2>
-        <p>Выберите количество игроков:</p>
-        <button onclick="startGame(2)">2 Игрока (Вы vs 1 Бот)</button>
-        <button onclick="startGame(3)">3 Игрока (Вы vs 2 Бота)</button>
-        <button onclick="startGame(4)">4 Игрока (Вы vs 3 Бота)</button>
+        <p>Выберите состав участников:</p>
+        <button id="btn-start-2">2 Игрока (Вы vs 1 Бот)</button>
+        <button id="btn-start-3">3 Игрока (Вы vs 2 Бота)</button>
+        <button id="btn-start-4">4 Игрока (Вы vs 3 Бота)</button>
     </div>
 </div>
 
@@ -98,7 +104,7 @@
 
 <div id="dice-overlay" class="overlay" style="display:none; background: rgba(0,0,0,0.8);">
     <div id="dice-cube">🎲</div>
-    <div id="dice-text">Бросаем кубик...</div>
+    <div id="dice-text" style="margin-top: 20px; font-size: 24px; color: #ffcc00; font-weight: bold;">Бросаем кубик...</div>
 </div>
 
 <div id="reroll-overlay" class="overlay" style="display:none; background: rgba(0,0,0,0.8);">
@@ -117,59 +123,60 @@
 <div id="game-container">
     <div id="board-section">
         <div id="board"></div>
-        <p style="color: #aaa; font-size: 13px;">Поле 10х10. Сектора 5х5. 12 особых клеток (по 3 на сектор).</p>
+        <p style="color: #aaa; font-size: 13px; margin-top: 10px;">Поле 10х10. Сектора 5х5. 12 особых клеток (по 3 на сектор).</p>
     </div>
 
     <div id="ui-section">
         <div class="info-panel" id="turn-info">
             <h2 id="current-player-text">Ход Игрока 1</h2>
             <p style="font-size: 16px;">Действий осталось: <strong id="actions-left" style="color: #10b981;">2</strong></p>
-            <button id="btn-end-turn" onclick="endTurn()" style="background:#10b981; font-size: 16px;">Завершить ход</button>
+            <button id="btn-end-turn" class="action-btn" onclick="endTurn()" style="background:#10b981; font-size: 16px;">Завершить ход</button>
         </div>
 
         <h3 style="margin-bottom: 5px;">Ваши жетоны:</h3>
         <div class="hand" id="player-hand"></div>
-        <div id="bots-info" style="font-size: 12px; margin-bottom: 10px;"></div>
+        <div id="bots-info" style="font-size: 12px; margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap;"></div>
 
         <div id="actions-panel">
             <div class="action-group">
-                <button id="btn-scout" onclick="actionScout()">1. Разведка (Добрать 2 жетона)</button>
+                <button id="btn-scout" class="action-btn" onclick="actionScout()">1. Разведка (Добрать 2 жетона)</button>
             </div>
 
             <div class="action-group">
                 <h4>2. Спуск корабля</h4>
-                <select id="ship-select" style="width:100%; margin-bottom:5px; padding:5px; font-size:16px;" onchange="updatePreview()"></select>
+                <select id="ship-select" style="width:100%; margin-bottom:5px; padding:8px; font-size:16px; background:#444; color:#fff; border:1px solid #666; border-radius:4px;" onchange="updatePreview()"></select>
                 <div style="font-size: 13px; color: #ffcc00; margin-bottom: 10px; min-height: 20px;" id="ship-desc"></div>
                 
                 <div id="ship-preview-container">
                     <span style="font-size: 12px; color: #aaa;">Кликните на палубу для выбора Якоря ⚓</span>
                     <div id="ship-preview"></div>
-                    <button type="button" id="btn-rotate" onclick="togglePreviewDir()" style="width:auto; padding:5px 15px;">Повернуть 🔄</button>
+                    <button type="button" id="btn-rotate" class="action-btn" onclick="togglePreviewDir()" style="width:auto; padding:5px 15px;">Повернуть 🔄</button>
                 </div>
 
-                <button id="btn-deploy" onclick="actionDeployStart()">Спустить (выберите якорную клетку на поле)</button>
+                <button id="btn-deploy" class="action-btn" onclick="actionDeployStart()">Спустить (выберите якорную клетку на поле)</button>
             </div>
 
             <div class="action-group">
                 <h4>3. Выстрелы (Осталось: <span id="shots-left-text" style="color: #ffcc00;">0</span>)</h4>
-                <p style="font-size: 12px; color: #aaa; margin: 0 0 5px 0;">Точный: 1 жетон (точно в цель) ИЛИ 2 жетона (скрещение).</p>
-                <div style="display: flex; gap: 5px;">
-                    <button id="btn-fire-acc" onclick="actionFireAccurate()">Точный (1-2ж)</button>
-                    <button id="btn-fire-fast" onclick="actionFireFastStart()">Быстрый 🎲</button>
+                <p style="font-size: 12px; color: #aaa; margin: 0 0 8px 0;">Точный: 1 жетон (точно в цель) ИЛИ 2 жетона (скрещение).</p>
+                <div style="display: flex; gap: 8px;">
+                    <button id="btn-fire-acc" class="action-btn" onclick="actionFireAccurate()">Точный (1-2ж)</button>
+                    <button id="btn-fire-fast" class="action-btn" onclick="actionFireFastStart()">Быстрый 🎲</button>
                 </div>
             </div>
 
             <div class="action-group">
-                <button id="btn-control" onclick="actionControl()">4. Контроль секторов</button>
+                <button id="btn-control" class="action-btn" onclick="actionControl()">4. Контроль секторов</button>
             </div>
         </div>
 
-        <h3>Лог игры:</h3>
+        <h3 style="margin-top: 20px;">Лог игры:</h3>
         <div class="log" id="game-log"></div>
     </div>
 </div>
 
 <script>
+    // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ ---
     const cols = ['А','Б','В','Г','Д','Е','Ж','З','И','К'];
     const rows = ['1','2','3','4','5','6','7','8','9','10'];
     const specialCoords = ['Б2','В3','Г4','Ж2','З3','И4','Б7','В8','Г9','Ж7','З8','И9'];
@@ -188,6 +195,7 @@
     let bag = []; let discard = []; let boardState = Array(100).fill(null);
     let players = [];
     let numPlayers = 2;
+    let gameStarted = false;
     
     let currentPlayer = 0; let actionsLeft = 2; let usedActions = []; let selectedTokens = [];
     let uiMode = 'IDLE'; let shotsRemaining = 0; let shipsBuiltTotal = 0;
@@ -195,34 +203,49 @@
 
     let previewDir = 'H'; let previewAnchorIdx = 0;
 
-    function startGame(count) {
+    // --- ИНИЦИАЛИЗАЦИЯ (СТАРТ) ---
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('btn-start-2').addEventListener('click', () => startMultiplayerGame(2));
+        document.getElementById('btn-start-3').addEventListener('click', () => startMultiplayerGame(3));
+        document.getElementById('btn-start-4').addEventListener('click', () => startMultiplayerGame(4));
+    });
+
+    function startMultiplayerGame(count) {
+        if(gameStarted) return;
+        gameStarted = true;
         numPlayers = count;
+        
         document.getElementById('start-overlay').style.display = 'none';
+        
+        let sb = document.getElementById('global-scoreboard');
+        sb.style.display = 'flex';
         document.getElementById('game-container').style.display = 'flex';
         
         // Создаем игроков
         players.push({ id: 0, name: 'ВЫ', colorClass: 'p0', colorHex: playerColors[0], vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] });
-        for(let i=1; i<numPlayers; i++) {
+        for(let i = 1; i < numPlayers; i++) {
             players.push({ id: i, name: `БОТ ${i}`, colorClass: `p${i}`, colorHex: playerColors[i], vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] });
         }
 
         // Рендер табло
-        let sb = document.getElementById('global-scoreboard');
         sb.innerHTML = '';
         players.forEach(p => {
             sb.innerHTML += `
                 <div class="player-score score-${p.colorClass}">
                     <h2>${p.name}</h2>
-                    <p>ПО: <span id="vp-p${p.id}" style="font-size: 1.2em;">0</span> / 21</p>
+                    <p>ПО: <span id="vp-p${p.id}" style="font-size: 1.2em; color: ${p.colorHex};">0</span> / 21</p>
                     <p>Кораблей: <span id="ships-p${p.id}">0</span></p>
                 </div>`;
         });
 
-        // Инициализация поля
+        // Создаем мешок
         for(let c of cols) for(let r of rows) bag.push(c+r);
-        bag = bag.concat(specialCoords); shuffle(bag);
+        bag = bag.concat(specialCoords); 
+        shuffle(bag);
 
+        // Создаем поле
         const boardEl = document.getElementById('board');
+        boardEl.innerHTML = ''; // Очистка на всякий случай
         for(let i=0; i<100; i++) {
             let cell = document.createElement('div');
             cell.id = 'cell-' + i; cell.className = 'cell';
@@ -236,24 +259,13 @@
         }
 
         for(let i=0; i<numPlayers; i++) drawTokens(i, 2);
-        log("Игра началась! Ваш ход.");
-        updateDeploySelect(); updateUI();
+        
+        log("Игра началась! Желаем удачи.");
+        updateDeploySelect(); 
+        updateUI();
     }
 
-    function checkWin() {
-        if (isGameOver) return true;
-        for (let p of players) {
-            if (p.vp >= 21) {
-                isGameOver = true;
-                document.getElementById('game-over-text').innerText = `${p.name} ПОБЕДИЛ!`;
-                document.getElementById('game-over-text').style.color = p.colorHex;
-                document.getElementById('game-over-overlay').style.display = 'flex';
-                return true;
-            }
-        }
-        return false;
-    }
-
+    // --- УТИЛИТЫ ---
     function shuffle(array) { array.sort(() => Math.random() - 0.5); }
     function getIndexFromCoord(coord) { 
         let letter = coord.match(/[А-Я]+/)[0]; let number = coord.match(/[0-9]+/)[0];
@@ -269,6 +281,20 @@
         logEl.scrollTop = logEl.scrollHeight;
     }
     
+    function checkWin() {
+        if (isGameOver) return true;
+        for (let p of players) {
+            if (p.vp >= 21) {
+                isGameOver = true;
+                document.getElementById('game-over-text').innerText = `${p.name} ПОБЕДИЛ!`;
+                document.getElementById('game-over-text').style.color = p.colorHex;
+                document.getElementById('game-over-overlay').style.display = 'flex';
+                return true;
+            }
+        }
+        return false;
+    }
+
     function hasActiveShip(pId, typeId) { return boardState.some(c => c && c.owner === pId && c.type === typeId && !c.destroyed); }
 
     function drawTokens(playerId, count) {
@@ -292,7 +318,9 @@
         if(cellEl) isHover ? cellEl.classList.add('highlight-target') : cellEl.classList.remove('highlight-target');
     }
 
+    // --- ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ---
     function updateDeploySelect() {
+        if (!gameStarted) return;
         let select = document.getElementById('ship-select');
         select.innerHTML = '';
         if (players[0].unbuilt.length === 0) {
@@ -346,35 +374,94 @@
     }
     function togglePreviewDir() { previewDir = previewDir === 'H' ? 'V' : 'H'; updatePreview(); }
 
-    function animateHitMiss(idx, type, callback) {
-        let cell = document.getElementById('cell-' + idx);
-        if(!cell) { if(callback) callback(); return; }
-        let fx = document.createElement('div');
-        fx.className = 'anim-effect'; fx.innerText = type === 'hit' ? '💥' : '💦';
-        cell.appendChild(fx);
-        setTimeout(() => { if(cell.contains(fx)) cell.removeChild(fx); if(callback) callback(); }, 800);
+    function updateUI() {
+        if(isGameOver) return;
+        
+        let turnText = document.getElementById('current-player-text');
+        turnText.innerText = `Ход: ${players[currentPlayer].name}`;
+        turnText.style.color = players[currentPlayer].colorHex;
+        
+        document.getElementById('turn-info').className = `info-panel score-${players[currentPlayer].colorClass}`;
+        document.getElementById('actions-left').innerText = actionsLeft;
+        document.getElementById('shots-left-text').innerText = shotsRemaining;
+
+        players.forEach(p => {
+            let vpEl = document.getElementById(`vp-p${p.id}`);
+            let shEl = document.getElementById(`ships-p${p.id}`);
+            if(vpEl) vpEl.innerText = p.vp;
+            if(shEl) shEl.innerText = p.shipsOnBoard;
+        });
+
+        let disabledAll = (currentPlayer !== 0 || uiMode !== 'IDLE' && uiMode !== 'ACCURATE_FIRING' && uiMode !== 'DEPLOYING');
+        
+        document.getElementById('btn-scout').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('SCOUT'));
+        document.getElementById('btn-deploy').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('DEPLOY') || players[0].unbuilt.length === 0) && uiMode !== 'DEPLOYING';
+        document.getElementById('btn-control').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('CONTROL'));
+        document.getElementById('btn-end-turn').disabled = disabledAll;
+
+        let btnFast = document.getElementById('btn-fire-fast');
+        btnFast.innerText = (hasActiveShip(0, 'frigate') && !freeFastShotUsed) ? 'Быстрый 🎲 (Фрегат)' : 'Быстрый 🎲 (1ж)';
+        let canFire = (!usedActions.includes('FIRE') && actionsLeft > 0 && players[0].shipsOnBoard > 0) || shotsRemaining > 0;
+        document.getElementById('btn-fire-acc').disabled = disabledAll || !canFire || players[0].hand.length < 1;
+        btnFast.disabled = disabledAll || !canFire;
+        document.getElementById('btn-rotate').disabled = disabledAll;
+
+        updateHandUI(); updateBoardUI();
     }
 
-    function rollDiceUI(callback) {
-        const overlay = document.getElementById('dice-overlay');
-        const cube = document.getElementById('dice-cube');
-        overlay.style.display = 'flex';
-        const faces = [{ id: 'HIT', t: '🎯' }, { id: 'HIT', t: '🎯' }, { id: 'NORTH', t: '⬆️' }, { id: 'SOUTH', t: '⬇️' }, { id: 'EAST', t: '➡️' }, { id: 'WEST', t: '⬅️' }];
-        let ticks = 0;
-        let interval = setInterval(() => {
-            cube.innerText = faces[Math.floor(Math.random() * faces.length)].t;
-            cube.style.transform = `rotate(${Math.random()*40 - 20}deg) scale(${1 + Math.random()*0.2})`;
-            ticks++;
-            if(ticks > 12) {
-                clearInterval(interval);
-                let result = faces[Math.floor(Math.random() * faces.length)];
-                cube.innerText = result.t; cube.style.transform = 'rotate(0deg) scale(1.2)';
-                document.getElementById('dice-text').innerText = result.id === 'HIT' ? '🎯 ЦЕЛЬ!' : 'ОТКЛОНЕНИЕ!';
-                setTimeout(() => { overlay.style.display = 'none'; cube.style.transform = 'scale(1)'; callback(result.id); }, 1200);
+    function updateHandUI() {
+        const handEl = document.getElementById('player-hand'); handEl.innerHTML = '';
+        players[0].hand.forEach((token, idx) => { 
+            let el = document.createElement('div');
+            el.className = 'token' + (selectedTokens.includes(idx) ? ' selected' : '') + (specialCoords.includes(token) ? ' special' : '');
+            el.innerText = token;
+            el.onclick = () => { toggleTokenSelection(idx); if(uiMode === 'DEPLOYING') updateBoardUI(); };
+            el.onmouseenter = () => hoverToken(token, true); el.onmouseleave = () => hoverToken(token, false);
+            handEl.appendChild(el);
+        });
+        
+        let botsInfo = document.getElementById('bots-info'); botsInfo.innerHTML = '';
+        for(let i = 1; i < numPlayers; i++) {
+            botsInfo.innerHTML += `<div style="color:${players[i].colorHex}; font-weight: bold;">Жетоны ${players[i].name}: <span style="color:#fff">${players[i].hand.length}</span></div>`;
+        }
+    }
+
+    function updateBoardUI() {
+        let selectedCoordsForDeploy = (uiMode === 'DEPLOYING' && currentPlayer === 0) ? selectedTokens.map(idx => players[0].hand[idx]) : [];
+
+        for(let i=0; i<100; i++) {
+            let cell = document.getElementById('cell-'+i);
+            let coord = getCoordFromIndex(i);
+            cell.innerHTML = `<span class="coord-text">${coord}</span>`;
+            cell.className = 'cell' + (specialCoords.includes(coord) ? ' special' : '');
+            cell.removeAttribute('title');
+            
+            if (selectedCoordsForDeploy.includes(coord)) cell.classList.add('deploy-highlight');
+            
+            if(boardState[i]) {
+                cell.classList.add(`ship-p${boardState[i].owner}`);
+                cell.title = `${shipBlueprints[boardState[i].type].name} (${players[boardState[i].owner].name})`;
+                
+                if(boardState[i].isHead) {
+                    cell.classList.add('head-cell');
+                    let img = document.createElement('img');
+                    // Флот 1 для Игрока, Флот 2,3,4 для Ботов
+                    img.src = `assets/fleet${boardState[i].owner + 1}/${boardState[i].type}.png`;
+                    img.className = 'ship-image';
+                    let size = shipBlueprints[boardState[i].type].size;
+                    img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
+                    img.style.height = '100%';
+                    if (boardState[i].dir !== 'H') { img.style.transformOrigin = '22.5px 22.5px'; img.style.transform = 'rotate(90deg)'; }
+                    cell.appendChild(img);
+                }
+                if(boardState[i].destroyed) {
+                    cell.innerHTML += `<div class="damage-marker"></div>`; cell.classList.add('hit-cell');
+                }
             }
-        }, 100);
+        }
     }
 
+    // --- ЛОГИКА ДЕЙСТВИЙ ИГРОКА ---
     function actionScout() {
         if(isGameOver || actionsLeft <= 0 || usedActions.includes('SCOUT')) return;
         usedActions.push('SCOUT'); actionsLeft--; updateUI();
@@ -446,9 +533,37 @@
     }
 
     function executeControlLogic(tokensIndices, callback) {
-        // Подсчет влияния для всех игроков во всех секторах
         let sectorCounts = [ {}, {}, {}, {} ];
-        for(();
+        for(let s=0; s<4; s++) for(let id=0; id<numPlayers; id++) sectorCounts[s][id] = 0;
+        
+        boardState.forEach((cell, idx) => { 
+            if(cell && !cell.destroyed) sectorCounts[getSector(idx)][cell.owner]++; 
+        });
+
+        let earnedVP = 0; let scoredSectors = []; let tokensToRemove = [...tokensIndices];
+
+        for(let idx of tokensIndices) {
+            let sector = getSector(getIndexFromCoord(players[currentPlayer].hand[idx]));
+            if (scoredSectors.includes(sector)) {
+                log(`Сектор ${sector + 1} уже принес очки в этом действии.`); continue;
+            }
+
+            let myCount = sectorCounts[sector][currentPlayer];
+            let maxEnemy = 0;
+            for(let p=0; p<numPlayers; p++) {
+                if(p !== currentPlayer && sectorCounts[sector][p] > maxEnemy) maxEnemy = sectorCounts[sector][p];
+            }
+
+            if(myCount > maxEnemy) { 
+                earnedVP += 2; scoredSectors.push(sector); log(`Успешный контроль сектора ${sector + 1}. +2 ПО!`); 
+            } else { 
+                log(`Контроль сектора ${sector + 1} провален (${myCount} клеток против ${maxEnemy}).`); 
+            }
+        }
+
+        tokensToRemove.sort((a,b)=>b-a).forEach(idx => { discard.push(players[currentPlayer].hand[idx]); players[currentPlayer].hand.splice(idx, 1); });
+        players[currentPlayer].vp += earnedVP; 
+        if(callback) callback();
     }
 
     function executeDeployLogic(shipId, dir, anchorOffset, startIdx, chosenTokensCoords, callback) {
@@ -480,6 +595,15 @@
         if(!usedActions.includes('DEPLOY')) usedActions.push('DEPLOY');
         checkWin();
         if(callback) callback(true); return true;
+    }
+
+    function animateHitMiss(idx, type, callback) {
+        let cell = document.getElementById('cell-' + idx);
+        if(!cell) { if(callback) callback(); return; }
+        let fx = document.createElement('div');
+        fx.className = 'anim-effect'; fx.innerText = type === 'hit' ? '💥' : '💦';
+        cell.appendChild(fx);
+        setTimeout(() => { if(cell.contains(fx)) cell.removeChild(fx); if(callback) callback(); }, 800);
     }
 
     function executeFastShotLogic(targetIdx, callback) {
@@ -564,7 +688,7 @@
         checkWin(); updateBoardUI();
     }
 
-    // --- БОТ ---
+    // --- ЛОГИКА БОТА ---
     function getEnemyShipCoords(botId, excludeType = null) {
         let coords = [];
         boardState.forEach((c, i) => { 
@@ -685,9 +809,9 @@
 
     function botDoShoot() {
         if(isGameOver) return;
+        let p = players[currentPlayer];
         let enemies = getEnemyShipCoords(currentPlayer);
         let woundeds = getWoundedEnemyCoords(currentPlayer);
-        let p = players[currentPlayer];
         
         if(enemies.length === 0) { shotsRemaining = 0; playBotTurn(); return; }
 
@@ -716,8 +840,8 @@
         let targetCoord = woundedFast.length > 0 ? woundedFast[Math.floor(Math.random() * woundedFast.length)] : allFast[Math.floor(Math.random() * allFast.length)];
         let targetIdx = getIndexFromCoord(targetCoord);
         
-        if(isFree) { freeFastShotUsed = true; log("Быстрый выстрел (Фрегат) по " + targetCoord); } 
-        else { discard.push(p.hand.splice(Math.floor(Math.random() * p.hand.length), 1)[0]); log("Быстрый выстрел по " + targetCoord); }
+        if(isFree) { freeFastShotUsed = true; log(`Быстрый выстрел (Фрегат) по ${targetCoord}`); } 
+        else { discard.push(p.hand.splice(Math.floor(Math.random() * p.hand.length), 1)[0]); log(`Быстрый выстрел (1 жетон) по ${targetCoord}`); }
 
         executeFastShotLogic(targetIdx, () => playBotTurn());
     }
@@ -730,89 +854,10 @@
         updateDeploySelect(); updateUI(); 
         if(currentPlayer !== 0) playBotTurn();
     }
-
-    function updateUI() {
-        if(isGameOver) return;
-        
-        let turnText = document.getElementById('current-player-text');
-        turnText.innerText = `Ход: ${players[currentPlayer].name}`;
-        turnText.style.color = players[currentPlayer].colorHex;
-        
-        document.getElementById('turn-info').className = `info-panel score-${players[currentPlayer].colorClass}`;
-        document.getElementById('actions-left').innerText = actionsLeft;
-        document.getElementById('shots-left-text').innerText = shotsRemaining;
-
-        players.forEach(p => {
-            document.getElementById(`vp-p${p.id}`).innerText = p.vp;
-            document.getElementById(`ships-p${p.id}`).innerText = p.shipsOnBoard;
-        });
-
-        let disabledAll = (currentPlayer !== 0 || uiMode !== 'IDLE' && uiMode !== 'ACCURATE_FIRING' && uiMode !== 'DEPLOYING');
-        
-        document.getElementById('btn-scout').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('SCOUT'));
-        document.getElementById('btn-deploy').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('DEPLOY') || players[0].unbuilt.length === 0) && uiMode !== 'DEPLOYING';
-        document.getElementById('btn-control').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('CONTROL'));
-        document.getElementById('btn-end-turn').disabled = disabledAll;
-
-        let btnFast = document.getElementById('btn-fire-fast');
-        btnFast.innerText = (hasActiveShip(0, 'frigate') && !freeFastShotUsed) ? 'Быстрый 🎲 (Фрегат)' : 'Быстрый 🎲 (1ж)';
-        let canFire = (!usedActions.includes('FIRE') && actionsLeft > 0 && players[0].shipsOnBoard > 0) || shotsRemaining > 0;
-        document.getElementById('btn-fire-acc').disabled = disabledAll || !canFire || players[0].hand.length < 1;
-        btnFast.disabled = disabledAll || !canFire;
-        document.getElementById('btn-rotate').disabled = disabledAll;
-
-        updateHandUI(); updateBoardUI();
-    }
-
-    function updateHandUI() {
-        const handEl = document.getElementById('player-hand'); handEl.innerHTML = '';
-        players[0].hand.forEach((token, idx) => { 
-            let el = document.createElement('div');
-            el.className = 'token' + (selectedTokens.includes(idx) ? ' selected' : '') + (specialCoords.includes(token) ? ' special' : '');
-            el.innerText = token;
-            el.onclick = () => { toggleTokenSelection(idx); if(uiMode === 'DEPLOYING') updateBoardUI(); };
-            el.onmouseenter = () => hoverToken(token, true); el.onmouseleave = () => hoverToken(token, false);
-            handEl.appendChild(el);
-        });
-        
-        let botsInfo = document.getElementById('bots-info'); botsInfo.innerHTML = '';
-        for(let i=1; i<numPlayers; i++) {
-            botsInfo.innerHTML += `<span style="color:${players[i].colorHex}; margin-right: 15px;">Жетоны ${players[i].name}: <b>${players[i].hand.length}</b></span>`;
-        }
-    }
-
-    function updateBoardUI() {
-        let selectedCoordsForDeploy = (uiMode === 'DEPLOYING' && currentPlayer === 0) ? selectedTokens.map(idx => players[0].hand[idx]) : [];
-
-        for(let i=0; i<100; i++) {
-            let cell = document.getElementById('cell-'+i);
-            let coord = getCoordFromIndex(i);
-            cell.innerHTML = `<span class="coord-text">${coord}</span>`;
-            cell.className = 'cell' + (specialCoords.includes(coord) ? ' special' : '');
-            cell.removeAttribute('title');
-            
-            if (selectedCoordsForDeploy.includes(coord)) cell.classList.add('deploy-highlight');
-            
-            if(boardState[i]) {
-                cell.classList.add(`ship-p${boardState[i].owner}`);
-                cell.title = `${shipBlueprints[boardState[i].type].name} (${players[boardState[i].owner].name})`;
-                
-                if(boardState[i].isHead) {
-                    cell.classList.add('head-cell');
-                    let img = document.createElement('img');
-                    img.src = `assets/fleet${boardState[i].owner + 1}/${boardState[i].type}.png`;
-                    img.className = 'ship-image';
-                    let size = shipBlueprints[boardState[i].type].size;
-                    img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
-                    img.style.height = '100%';
-                    if (boardState[i].dir !== 'H') { img.style.transformOrigin = '22.5px 22.5px'; img.style.transform = 'rotate(90deg)'; }
-                    cell.appendChild(img);
-                }
-                if(boardState[i].destroyed) {
-                    cell.innerHTML += `<div class="damage-marker"></div>`; cell.classList.add('hit-cell');
-                }
-            }
-        }
+    
+    function resolveReroll(choice) { 
+        document.getElementById('reroll-overlay').style.display = 'none'; 
+        if(rerollCallback) { rerollCallback(choice); rerollCallback = null; } 
     }
 </script>
 </body>
