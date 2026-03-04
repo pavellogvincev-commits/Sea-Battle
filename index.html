@@ -2,19 +2,22 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Tactical Battleship Prototype v1.7 (AI Polish & Z-Index Fix)</title>
+    <title>Tactical Battleship Prototype v1.8 (Multiplayer)</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; gap: 20px; user-select: none;}
+        body { font-family: 'Segoe UI', sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 20px; user-select: none;}
         h1, h2, h3, h4 { margin-top: 0; }
         
-        #global-scoreboard { display: flex; justify-content: space-around; background: #111; padding: 15px; border-radius: 8px; border: 2px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5);}
-        .player-score { text-align: center; padding: 10px 20px; border-radius: 6px; min-width: 250px;}
-        .player-score h2 { margin: 0 0 10px 0; }
-        .player-score p { margin: 5px 0; font-size: 16px; font-weight: bold;}
-        .score-p0 { background: rgba(59, 130, 246, 0.2); border: 2px solid #3b82f6; }
-        .score-p1 { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; }
+        #global-scoreboard { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; background: #111; padding: 15px; border-radius: 8px; border: 2px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5); width: 100%; max-width: 1000px;}
+        .player-score { text-align: center; padding: 10px 15px; border-radius: 6px; min-width: 150px; flex: 1;}
+        .player-score h2 { margin: 0 0 10px 0; font-size: 1.2rem;}
+        .player-score p { margin: 5px 0; font-size: 14px; font-weight: bold;}
+        
+        .score-p0 { background: rgba(59, 130, 246, 0.2); border: 2px solid #3b82f6; color: #60a5fa;}
+        .score-p1 { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; color: #f87171;}
+        .score-p2 { background: rgba(234, 179, 8, 0.2); border: 2px solid #eab308; color: #facc15;}
+        .score-p3 { background: rgba(16, 185, 129, 0.2); border: 2px solid #10b981; color: #34d399;}
 
-        #game-container { display: flex; gap: 30px; justify-content: center; }
+        #game-container { display: flex; gap: 30px; justify-content: center; max-width: 1200px; display: none; } /* Скрыто до старта */
         #board-section { display: flex; flex-direction: column; align-items: center;}
         #ui-section { width: 450px; background: #333; padding: 20px; border-radius: 8px;}
         
@@ -32,12 +35,12 @@
         
         .ship-image { position: absolute; top: 0; left: 0; z-index: 20; pointer-events: none; }
         .head-cell { z-index: 15 !important; }
-        
-        /* ИСПРАВЛЕНИЕ Z-INDEX: Клетки с попаданием поднимаются над всем остальным, чтобы огонь был поверх корабля */
         .hit-cell { z-index: 25 !important; }
 
         .ship-p0 { background-color: rgba(59, 130, 246, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         .ship-p1 { background-color: rgba(239, 68, 68, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .ship-p2 { background-color: rgba(234, 179, 8, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
+        .ship-p3 { background-color: rgba(16, 185, 129, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         
         .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 30; pointer-events: none;}
         
@@ -48,7 +51,6 @@
         .token { background: #eee; color: #222; padding: 4px 8px; border-radius: 4px; font-weight: bold; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; font-size: 13px;}
         .token:hover { transform: translateY(-2px); }
         .token.selected { border-color: #ffcc00; background: #fffacd; box-shadow: 0 0 8px rgba(255, 204, 0, 0.8);}
-        .token.special { border: 2px dashed #d97706;}
         
         button { background: #4b5563; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 5px; font-weight: bold; transition: background 0.2s;}
         button:hover:not(:disabled) { background: #6b7280; }
@@ -63,42 +65,54 @@
         .preview-cell { width: 30px; height: 30px; background: #888; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative;}
         .preview-cell.is-anchor { background: #ffcc00; border-color: #d97706;}
 
-        .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column;}
+        /* Стартовый и финальный экраны */
+        .overlay { display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; flex-direction: column;}
+        .dialog-box { background: #333; padding: 30px; border-radius: 8px; border: 2px solid #ffcc00; text-align: center; max-width: 400px; box-shadow: 0 0 20px rgba(0,0,0,0.8);}
+        .dialog-box h2 { color: #ffcc00; margin-bottom: 20px;}
+        .dialog-box button { background: #10b981; font-size: 16px; margin: 5px 0; }
+        
         #dice-cube { font-size: 80px; background: #fff; width: 150px; height: 150px; display: flex; align-items: center; justify-content: center; border-radius: 25px; box-shadow: 0 0 30px #ffcc00; color: #000; transition: transform 0.1s;}
         #dice-text { margin-top: 20px; font-size: 24px; color: #ffcc00; font-weight: bold; text-align: center;}
-        .dialog-box { background: #333; padding: 20px; border-radius: 8px; border: 2px solid #ffcc00; text-align: center; max-width: 400px;}
     </style>
 </head>
 <body>
 
-<div id="dice-overlay" class="overlay">
+<!-- Меню старта -->
+<div id="start-overlay" class="overlay">
+    <div class="dialog-box">
+        <h2>Тактический Морской Бой</h2>
+        <p>Выберите количество игроков:</p>
+        <button onclick="startGame(2)">2 Игрока (Вы vs 1 Бот)</button>
+        <button onclick="startGame(3)">3 Игрока (Вы vs 2 Бота)</button>
+        <button onclick="startGame(4)">4 Игрока (Вы vs 3 Бота)</button>
+    </div>
+</div>
+
+<!-- Экран конца игры -->
+<div id="game-over-overlay" class="overlay" style="display:none;">
+    <div class="dialog-box">
+        <h2 id="game-over-text" style="font-size: 32px;">ПОБЕДА!</h2>
+        <button onclick="location.reload()" style="background: #3b82f6;">Играть снова</button>
+    </div>
+</div>
+
+<div id="dice-overlay" class="overlay" style="display:none; background: rgba(0,0,0,0.8);">
     <div id="dice-cube">🎲</div>
     <div id="dice-text">Бросаем кубик...</div>
 </div>
 
-<div id="reroll-overlay" class="overlay">
-    <div class="dialog-box">
+<div id="reroll-overlay" class="overlay" style="display:none; background: rgba(0,0,0,0.8);">
+    <div class="dialog-box" style="border-color: #ef4444;">
         <h3>Отклонение!</h3>
         <p>Использовать свойство <b>Эсминца</b> для переброса кубика?</p>
         <div style="display:flex; gap:10px; margin-top:20px;">
             <button onclick="resolveReroll(true)" style="background: #10b981;">Да, перебросить!</button>
-            <button onclick="resolveReroll(false)">Нет, оставить</button>
+            <button onclick="resolveReroll(false)" style="background: #ef4444;">Нет, оставить</button>
         </div>
     </div>
 </div>
 
-<div id="global-scoreboard">
-    <div class="player-score score-p0">
-        <h2 style="color: #60a5fa;">Вы (Игрок 1)</h2>
-        <p>ПО: <span id="vp-p0" style="color: #ffcc00; font-size: 1.2em;">0</span> / 21</p>
-        <p>Кораблей: <span id="ships-p0">0</span></p>
-    </div>
-    <div class="player-score score-p1">
-        <h2 style="color: #f87171;">Бот (Игрок 2)</h2>
-        <p>ПО: <span id="vp-p1" style="color: #ffcc00; font-size: 1.2em;">0</span> / 21</p>
-        <p>Кораблей: <span id="ships-p1">0</span></p>
-    </div>
-</div>
+<div id="global-scoreboard"></div>
 
 <div id="game-container">
     <div id="board-section">
@@ -115,6 +129,7 @@
 
         <h3 style="margin-bottom: 5px;">Ваши жетоны:</h3>
         <div class="hand" id="player-hand"></div>
+        <div id="bots-info" style="font-size: 12px; margin-bottom: 10px;"></div>
 
         <div id="actions-panel">
             <div class="action-group">
@@ -137,7 +152,7 @@
 
             <div class="action-group">
                 <h4>3. Выстрелы (Осталось: <span id="shots-left-text" style="color: #ffcc00;">0</span>)</h4>
-                <p style="font-size: 12px; color: #aaa; margin: 0 0 5px 0;">Точный: 1 жетон (точно в цель) ИЛИ 2 жетона (скрещение Буква+Цифра).</p>
+                <p style="font-size: 12px; color: #aaa; margin: 0 0 5px 0;">Точный: 1 жетон (точно в цель) ИЛИ 2 жетона (скрещение).</p>
                 <div style="display: flex; gap: 5px;">
                     <button id="btn-fire-acc" onclick="actionFireAccurate()">Точный (1-2ж)</button>
                     <button id="btn-fire-fast" onclick="actionFireFastStart()">Быстрый 🎲</button>
@@ -157,13 +172,7 @@
 <script>
     const cols = ['А','Б','В','Г','Д','Е','Ж','З','И','К'];
     const rows = ['1','2','3','4','5','6','7','8','9','10'];
-    
-    const specialCoords = [
-        'Б2','В3','Г4',
-        'Ж2','З3','И4',
-        'Б7','В8','Г9',
-        'Ж7','З8','И9'
-    ];
+    const specialCoords = ['Б2','В3','Г4','Ж2','З3','И4','Б7','В8','Г9','Ж7','З8','И9'];
     
     const shipBlueprints = {
         'scout': { name: 'Разведчик', size: 2, desc: 'Разведка: шанс +1 жетон.' },
@@ -174,20 +183,42 @@
         'battleship': { name: 'Линкор', size: 4, desc: 'Потопление врага = +1 ПО и +1 жетон.' }
     };
     const defaultFleet = ['scout', 'corvette', 'submarine', 'destroyer', 'frigate', 'battleship'];
+    const playerColors = ['#60a5fa', '#f87171', '#facc15', '#34d399']; // Синий, Красный, Желтый, Зеленый
 
     let bag = []; let discard = []; let boardState = Array(100).fill(null);
-    let players = [
-        { id: 0, name: 'ВЫ', colorClass: 'p0', vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] },
-        { id: 1, name: 'БОТ', colorClass: 'p1', vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] }
-    ];
+    let players = [];
+    let numPlayers = 2;
     
     let currentPlayer = 0; let actionsLeft = 2; let usedActions = []; let selectedTokens = [];
     let uiMode = 'IDLE'; let shotsRemaining = 0; let shipsBuiltTotal = 0;
-    let freeFastShotUsed = false; let rerollCallback = null;
+    let freeFastShotUsed = false; let rerollCallback = null; let isGameOver = false;
 
     let previewDir = 'H'; let previewAnchorIdx = 0;
 
-    function initGame() {
+    function startGame(count) {
+        numPlayers = count;
+        document.getElementById('start-overlay').style.display = 'none';
+        document.getElementById('game-container').style.display = 'flex';
+        
+        // Создаем игроков
+        players.push({ id: 0, name: 'ВЫ', colorClass: 'p0', colorHex: playerColors[0], vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] });
+        for(let i=1; i<numPlayers; i++) {
+            players.push({ id: i, name: `БОТ ${i}`, colorClass: `p${i}`, colorHex: playerColors[i], vp: 0, hand: [], shipsOnBoard: 0, unbuilt: [...defaultFleet] });
+        }
+
+        // Рендер табло
+        let sb = document.getElementById('global-scoreboard');
+        sb.innerHTML = '';
+        players.forEach(p => {
+            sb.innerHTML += `
+                <div class="player-score score-${p.colorClass}">
+                    <h2>${p.name}</h2>
+                    <p>ПО: <span id="vp-p${p.id}" style="font-size: 1.2em;">0</span> / 21</p>
+                    <p>Кораблей: <span id="ships-p${p.id}">0</span></p>
+                </div>`;
+        });
+
+        // Инициализация поля
         for(let c of cols) for(let r of rows) bag.push(c+r);
         bag = bag.concat(specialCoords); shuffle(bag);
 
@@ -195,19 +226,32 @@
         for(let i=0; i<100; i++) {
             let cell = document.createElement('div');
             cell.id = 'cell-' + i; cell.className = 'cell';
-            
             let coordText = document.createElement('span');
             coordText.className = 'coord-text';
             coordText.innerText = getCoordFromIndex(i);
             cell.appendChild(coordText);
-            
             if(specialCoords.includes(getCoordFromIndex(i))) cell.classList.add('special');
             cell.onclick = () => handleCellClick(i);
             boardEl.appendChild(cell);
         }
-        drawTokens(0, 2); drawTokens(1, 2);
+
+        for(let i=0; i<numPlayers; i++) drawTokens(i, 2);
         log("Игра началась! Ваш ход.");
         updateDeploySelect(); updateUI();
+    }
+
+    function checkWin() {
+        if (isGameOver) return true;
+        for (let p of players) {
+            if (p.vp >= 21) {
+                isGameOver = true;
+                document.getElementById('game-over-text').innerText = `${p.name} ПОБЕДИЛ!`;
+                document.getElementById('game-over-text').style.color = p.colorHex;
+                document.getElementById('game-over-overlay').style.display = 'flex';
+                return true;
+            }
+        }
+        return false;
     }
 
     function shuffle(array) { array.sort(() => Math.random() - 0.5); }
@@ -217,9 +261,11 @@
     }
     function getCoordFromIndex(index) { return cols[index % 10] + (Math.floor(index / 10) + 1); }
     function getSector(index) { return (index % 10 < 5 ? 0 : 1) + (Math.floor(index / 10) < 5 ? 0 : 2); }
+    
     function log(msg) {
+        if(isGameOver) return;
         const logEl = document.getElementById('game-log');
-        logEl.innerHTML += `<div><span style="color:${currentPlayer===0?'#60a5fa':'#f87171'}">[${players[currentPlayer].name}]</span>: ${msg}</div>`;
+        logEl.innerHTML += `<div><span style="color:${players[currentPlayer].colorHex}">[${players[currentPlayer].name}]</span>: ${msg}</div>`;
         logEl.scrollTop = logEl.scrollHeight;
     }
     
@@ -233,14 +279,14 @@
     }
     
     function toggleTokenSelection(index) {
-        if(uiMode !== 'IDLE' || currentPlayer === 1) return; 
+        if(uiMode !== 'IDLE' || currentPlayer !== 0 || isGameOver) return; 
         let selIdx = selectedTokens.indexOf(index);
         selIdx > -1 ? selectedTokens.splice(selIdx, 1) : selectedTokens.push(index);
         updateHandUI();
     }
 
     function hoverToken(coord, isHover) {
-        if(currentPlayer === 1) return;
+        if(currentPlayer !== 0 || isGameOver) return;
         let cellIdx = getIndexFromCoord(coord);
         let cellEl = document.getElementById('cell-' + cellIdx);
         if(cellEl) isHover ? cellEl.classList.add('highlight-target') : cellEl.classList.remove('highlight-target');
@@ -249,7 +295,6 @@
     function updateDeploySelect() {
         let select = document.getElementById('ship-select');
         select.innerHTML = '';
-        
         if (players[0].unbuilt.length === 0) {
             let opt = document.createElement('option');
             opt.value = ""; opt.innerText = "Флот полностью построен!";
@@ -268,7 +313,6 @@
         let shipId = document.getElementById('ship-select').value;
         let container = document.getElementById('ship-preview');
         let desc = document.getElementById('ship-desc');
-        
         if(!shipId) { container.innerHTML = ''; desc.innerText = ''; return; }
         
         let size = shipBlueprints[shipId].size;
@@ -296,7 +340,6 @@
                 }
                 pCell.appendChild(img);
             }
-            
             pCell.onclick = () => { previewAnchorIdx = i; updatePreview(); };
             container.appendChild(pCell);
         }
@@ -315,9 +358,7 @@
     function rollDiceUI(callback) {
         const overlay = document.getElementById('dice-overlay');
         const cube = document.getElementById('dice-cube');
-        const text = document.getElementById('dice-text');
-        overlay.style.display = 'flex'; text.innerText = 'Бросаем кубик...';
-        
+        overlay.style.display = 'flex';
         const faces = [{ id: 'HIT', t: '🎯' }, { id: 'HIT', t: '🎯' }, { id: 'NORTH', t: '⬆️' }, { id: 'SOUTH', t: '⬇️' }, { id: 'EAST', t: '➡️' }, { id: 'WEST', t: '⬅️' }];
         let ticks = 0;
         let interval = setInterval(() => {
@@ -328,13 +369,15 @@
                 clearInterval(interval);
                 let result = faces[Math.floor(Math.random() * faces.length)];
                 cube.innerText = result.t; cube.style.transform = 'rotate(0deg) scale(1.2)';
-                text.innerText = result.id === 'HIT' ? '🎯 ЦЕЛЬ!' : 'ОТКЛОНЕНИЕ!';
+                document.getElementById('dice-text').innerText = result.id === 'HIT' ? '🎯 ЦЕЛЬ!' : 'ОТКЛОНЕНИЕ!';
                 setTimeout(() => { overlay.style.display = 'none'; cube.style.transform = 'scale(1)'; callback(result.id); }, 1200);
             }
         }, 100);
     }
 
-    function executeScoutLogic(callback) {
+    function actionScout() {
+        if(isGameOver || actionsLeft <= 0 || usedActions.includes('SCOUT')) return;
+        usedActions.push('SCOUT'); actionsLeft--; updateUI();
         drawTokens(currentPlayer, 2); log("Разведка (добрал 2 жетона)."); 
         if(hasActiveShip(currentPlayer, 'scout')) {
             log("<b>Свойство Разведчика!</b> Бросаем кубик...");
@@ -342,32 +385,24 @@
             rollDiceUI((roll) => {
                 if(roll === 'HIT') { drawTokens(currentPlayer, 1); log("Разведчик нашел цель! +1 жетон."); } 
                 else { log("Разведчик промахнулся."); }
-                if(callback) callback();
+                uiMode = 'IDLE'; updateUI();
             });
         } else {
-            if(callback) callback();
+            uiMode = 'IDLE'; updateUI();
         }
     }
 
-    function actionScout() {
-        if(actionsLeft <= 0 || usedActions.includes('SCOUT')) return;
-        usedActions.push('SCOUT'); actionsLeft--; updateUI();
-        executeScoutLogic(() => { uiMode = 'IDLE'; updateUI(); });
-    }
-
     function actionDeployStart() {
-        if(actionsLeft <= 0 || usedActions.includes('DEPLOY')) return;
+        if(isGameOver || actionsLeft <= 0 || usedActions.includes('DEPLOY')) return;
         let shipId = document.getElementById('ship-select').value;
         if(!shipId) return alert("Все корабли уже построены!");
-        let size = shipBlueprints[shipId].size;
-        if(selectedTokens.length !== size) return alert(`Выберите ровно ${size} жетонов для оплаты!`);
+        if(selectedTokens.length !== shipBlueprints[shipId].size) return alert(`Выберите ровно ${shipBlueprints[shipId].size} жетонов!`);
         uiMode = 'DEPLOYING'; log(`Спуск: Кликните на подсвеченную клетку для Якоря.`); updateUI();
     }
 
     function startFireAction() {
         if (!usedActions.includes('FIRE') && shotsRemaining === 0) {
-            let limit = players[currentPlayer].shipsOnBoard;
-            if(hasActiveShip(currentPlayer, 'corvette')) { limit += 1; log("<b>Корвет:</b> +1 выстрел!"); }
+            let limit = players[currentPlayer].shipsOnBoard + (hasActiveShip(currentPlayer, 'corvette') ? 1 : 0);
             if (limit === 0) { if(currentPlayer===0) alert("Нет выстрелов!"); return false; }
             usedActions.push('FIRE'); actionsLeft--; shotsRemaining = limit;
             log(`Стрельба начата. Выстрелов: ${shotsRemaining}`);
@@ -380,30 +415,22 @@
         shotsRemaining--;
         if(shotsRemaining <= 0) { shotsRemaining = 0; log("Все выстрелы израсходованы."); }
         uiMode = 'IDLE'; updateUI();
-        if(callback) callback();
+        if(callback && !isGameOver) callback();
     }
 
     function actionFireAccurate() {
-        if (!startFireAction()) return;
-        if (selectedTokens.length !== 1 && selectedTokens.length !== 2) return alert("Для точного выстрела выберите ровно 1 или 2 жетона!");
-        
+        if(isGameOver || !startFireAction()) return;
+        if (selectedTokens.length !== 1 && selectedTokens.length !== 2) return alert("Выберите 1 или 2 жетона!");
         uiMode = 'ACCURATE_FIRING'; 
-        if (selectedTokens.length === 1) {
-            let t = players[currentPlayer].hand[selectedTokens[0]];
-            log(`Точный выстрел за 1 жетон. Кликните точно в координату <b>${t}</b>.`);
-        } else {
-            let t1 = players[currentPlayer].hand[selectedTokens[0]];
-            let t2 = players[currentPlayer].hand[selectedTokens[1]];
-            log(`Скрещение координат: <b>${t1}</b> и <b>${t2}</b>. Кликните цель (Буква одного + Цифра другого).`); 
-        }
+        log(selectedTokens.length === 1 ? "Точный выстрел за 1 жетон." : "Точный выстрел по скрещению.");
         updateUI();
     }
 
     function actionFireFastStart() {
-        if (!startFireAction()) return;
+        if(isGameOver || !startFireAction()) return;
         let isFree = hasActiveShip(currentPlayer, 'frigate') && !freeFastShotUsed;
         if(isFree) {
-            if(selectedTokens.length > 0) return alert("Фрегат дает бесплатный выстрел! Снимите жетоны.");
+            if(selectedTokens.length > 0) return alert("Снимите жетоны для бесплатного выстрела!");
             freeFastShotUsed = true; log("<b>Фрегат:</b> Бесплатный выстрел!");
         } else {
             if(selectedTokens.length !== 1) return alert("Выберите ровно 1 жетон!");
@@ -412,187 +439,118 @@
     }
 
     function actionControl() {
-        if(actionsLeft <= 0 || usedActions.includes('CONTROL') || selectedTokens.length === 0) return;
+        if(isGameOver || actionsLeft <= 0 || usedActions.includes('CONTROL') || selectedTokens.length === 0) return;
         executeControlLogic(selectedTokens, () => {
-            selectedTokens = []; usedActions.push('CONTROL'); actionsLeft--; updateUI();
+            selectedTokens = []; usedActions.push('CONTROL'); actionsLeft--; updateUI(); checkWin();
         });
     }
 
     function executeControlLogic(tokensIndices, callback) {
-        let sectorCounts = [ {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0} ];
-        boardState.forEach((cell, idx) => { if(cell && !cell.destroyed) sectorCounts[getSector(idx)][cell.owner]++; });
-
-        let earnedVP = 0; 
-        let scoredSectors = [];
-        let tokensToRemove = [...tokensIndices];
-
-        for(let idx of tokensIndices) {
-            let sector = getSector(getIndexFromCoord(players[currentPlayer].hand[idx]));
-            
-            if (scoredSectors.includes(sector)) {
-                log(`Сектор ${sector + 1} уже принес очки в этом действии.`);
-                continue;
-            }
-
-            let myCount = sectorCounts[sector][currentPlayer];
-            let enemyCount = sectorCounts[sector][currentPlayer === 0 ? 1 : 0];
-
-            if(myCount > enemyCount) { 
-                earnedVP += 2; 
-                scoredSectors.push(sector);
-                log(`Успешный контроль сектора ${sector + 1}. +2 ПО!`); 
-            } else { 
-                log(`Контроль сектора ${sector + 1} провален (${myCount} клеток против ${enemyCount}).`); 
-            }
-        }
-
-        tokensToRemove.sort((a,b)=>b-a).forEach(idx => { discard.push(players[currentPlayer].hand[idx]); players[currentPlayer].hand.splice(idx, 1); });
-        players[currentPlayer].vp += earnedVP; 
-        if(callback) callback();
+        // Подсчет влияния для всех игроков во всех секторах
+        let sectorCounts = [ {}, {}, {}, {} ];
+        for(();
     }
-
-    function showRerollDialog(callback) {
-        if(currentPlayer === 1) { setTimeout(() => callback(true), 500); } 
-        else { document.getElementById('reroll-overlay').style.display = 'flex'; rerollCallback = callback; }
-    }
-    function resolveReroll(choice) { document.getElementById('reroll-overlay').style.display = 'none'; if(rerollCallback) { rerollCallback(choice); rerollCallback = null; } }
 
     function executeDeployLogic(shipId, dir, anchorOffset, startIdx, chosenTokensCoords, callback) {
         let size = shipBlueprints[shipId].size;
-        let cellsToOccupy = [];
         let realStart = startIdx - (dir === 'H' ? anchorOffset : anchorOffset * 10);
-        
+        let cellsToOccupy = [];
         for(let i=0; i<size; i++) {
-            let targetIdx = realStart + (dir === 'H' ? i : i*10);
-            if(dir === 'H' && Math.floor(targetIdx/10) !== Math.floor(realStart/10)) return false; 
-            if(targetIdx < 0 || targetIdx > 99 || boardState[targetIdx] !== null) return false; 
-            cellsToOccupy.push(targetIdx);
+            let t = realStart + (dir === 'H' ? i : i*10);
+            if(dir === 'H' && Math.floor(t/10) !== Math.floor(realStart/10)) return false; 
+            if(t < 0 || t > 99 || boardState[t] !== null) return false; 
+            cellsToOccupy.push(t);
         }
 
         shipsBuiltTotal++;
         let newShipId = 's' + shipsBuiltTotal;
-        
-        cellsToOccupy.forEach((cIdx, indexInArray) => {
-            boardState[cIdx] = { 
-                owner: currentPlayer, 
-                shipId: newShipId, 
-                type: shipId, 
-                destroyed: false, 
-                isAnchor: (cIdx === startIdx), 
-                isHead: (indexInArray === 0),
-                dir: dir 
-            };
+        cellsToOccupy.forEach((cIdx, idx) => {
+            boardState[cIdx] = { owner: currentPlayer, shipId: newShipId, type: shipId, destroyed: false, isAnchor: (cIdx === startIdx), isHead: (idx === 0), dir: dir };
             if(specialCoords.includes(getCoordFromIndex(cIdx))) { players[currentPlayer].vp += 1; log(`Особая клетка! +1 ПО.`); }
         });
 
-        let handTokens = players[currentPlayer].hand;
         chosenTokensCoords.forEach(coord => {
-            let idx = handTokens.indexOf(coord);
-            if(idx > -1) { discard.push(handTokens[idx]); handTokens.splice(idx, 1); }
+            let idx = players[currentPlayer].hand.indexOf(coord);
+            if(idx > -1) { discard.push(coord); players[currentPlayer].hand.splice(idx, 1); }
         });
 
         players[currentPlayer].shipsOnBoard++; 
         players[currentPlayer].unbuilt = players[currentPlayer].unbuilt.filter(s => s !== shipId);
         log(`Спущен корабль: ${shipBlueprints[shipId].name}.`); 
-        
         if(!usedActions.includes('DEPLOY')) usedActions.push('DEPLOY');
-        if(callback) callback(true);
-        return true;
+        checkWin();
+        if(callback) callback(true); return true;
     }
 
     function executeFastShotLogic(targetIdx, callback) {
         uiMode = 'ANIMATING'; updateUI();
         let resolveShot = (roll) => {
             log(`Кубик: <b>${roll}</b>`);
-            let finalIdx = targetIdx;
-            if(roll==='NORTH') finalIdx-=10; if(roll==='SOUTH') finalIdx+=10;
-            if(roll==='EAST') { finalIdx+=1; if(finalIdx%10 === 0) finalIdx = -1; }
-            if(roll==='WEST') { finalIdx-=1; if((finalIdx+1)%10 === 0) finalIdx = -1; }
+            let fIdx = targetIdx;
+            if(roll==='NORTH') fIdx-=10; if(roll==='SOUTH') fIdx+=10;
+            if(roll==='EAST') { fIdx+=1; if(fIdx%10 === 0) fIdx = -1; }
+            if(roll==='WEST') { fIdx-=1; if((fIdx+1)%10 === 0) fIdx = -1; }
             
-            if(finalIdx >= 0 && finalIdx <= 99) {
-                let isHit = boardState[finalIdx] && !boardState[finalIdx].destroyed;
-                animateHitMiss(finalIdx, isHit ? 'hit' : 'miss', () => { processHit(finalIdx, true); finishShot(callback); });
-            } else {
-                log("Мимо поля."); finishShot(callback);
-            }
+            if(fIdx >= 0 && fIdx <= 99) {
+                let isHit = boardState[fIdx] && !boardState[fIdx].destroyed;
+                animateHitMiss(fIdx, isHit ? 'hit' : 'miss', () => { processHit(fIdx, true); finishShot(callback); });
+            } else { log("Мимо поля."); finishShot(callback); }
         };
 
         rollDiceUI((roll) => {
             if(roll !== 'HIT' && hasActiveShip(currentPlayer, 'destroyer')) {
-                showRerollDialog((yes) => {
-                    if(yes) { log("<b>Эсминец:</b> Переброс кубика!"); rollDiceUI((nRoll) => resolveShot(nRoll)); } 
-                    else resolveShot(roll);
-                });
-            } else { resolveShot(roll); }
+                if(currentPlayer === 0) {
+                    document.getElementById('reroll-overlay').style.display = 'flex';
+                    rerollCallback = (yes) => { if(yes) { log("Переброс!"); rollDiceUI(resolveShot); } else resolveShot(roll); };
+                } else {
+                    log("<b>Эсминец:</b> Переброс кубика!"); rollDiceUI(resolveShot);
+                }
+            } else resolveShot(roll);
         });
     }
 
     function handleCellClick(index) {
-        if(currentPlayer === 1) return; 
+        if(currentPlayer !== 0 || isGameOver) return; 
 
         if(uiMode === 'DEPLOYING') {
             let shipId = document.getElementById('ship-select').value;
             let anchorCoord = getCoordFromIndex(index);
-            let chosenCoords = selectedTokens.map(idx => players[currentPlayer].hand[idx]);
-            
-            if(!chosenCoords.includes(anchorCoord)) return alert("Клетка Якоря должна совпадать с оплаченным жетоном!");
+            let chosenCoords = selectedTokens.map(idx => players[0].hand[idx]);
+            if(!chosenCoords.includes(anchorCoord)) return alert("Нет якоря!");
 
             if(executeDeployLogic(shipId, previewDir, previewAnchorIdx, index, chosenCoords)) {
                 selectedTokens = []; uiMode = 'IDLE'; actionsLeft--; 
                 updateDeploySelect(); updateUI();
-            } else { alert("Корабль не помещается!"); }
+            } else alert("Корабль не помещается!");
 
-        } 
-        else if (uiMode === 'ACCURATE_FIRING') {
-            let targetCoord = getCoordFromIndex(index);
-
+        } else if (uiMode === 'ACCURATE_FIRING') {
+            let tCoord = getCoordFromIndex(index);
             if (selectedTokens.length === 1) {
-                let tCoord = players[currentPlayer].hand[selectedTokens[0]];
-                if (targetCoord !== tCoord) { return alert(`Промах! Для 1 жетона цель должна быть точно ${tCoord}.`); }
-                discard.push(tCoord); players[currentPlayer].hand.splice(selectedTokens[0], 1); selectedTokens = [];
-                log(`Точный выстрел (1 жетон) в ${targetCoord}!`);
+                if (tCoord !== players[0].hand[selectedTokens[0]]) return alert(`Промах!`);
+                discard.push(players[0].hand.splice(selectedTokens[0], 1)[0]);
             } else {
-                let t1 = players[currentPlayer].hand[selectedTokens[0]];
-                let t2 = players[currentPlayer].hand[selectedTokens[1]];
-                
-                let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
-                let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
-                let trgL = targetCoord.match(/[А-Я]+/)[0]; let trgN = targetCoord.match(/[0-9]+/)[0];
-
-                let isValid = (trgL === t1L && trgN === t2N) || (trgL === t2L && trgN === t1N);
-
-                if (!isValid) { return alert(`Промах! Цель ${targetCoord} не может быть составлена из жетонов ${t1} и ${t2}.`); }
-                
-                selectedTokens.sort((a,b)=>b-a).forEach(idx => {
-                    discard.push(players[currentPlayer].hand[idx]); players[currentPlayer].hand.splice(idx, 1);
-                });
-                selectedTokens = []; 
-                log(`Точный выстрел (скрещение) в ${targetCoord}!`);
+                let t1 = players[0].hand[selectedTokens[0]]; let t2 = players[0].hand[selectedTokens[1]];
+                let isValid = (tCoord[0]===t1[0]&&tCoord.slice(1)===t2.slice(1)) || (tCoord[0]===t2[0]&&tCoord.slice(1)===t1.slice(1));
+                if (!isValid) return alert(`Неверное скрещение!`);
+                selectedTokens.sort((a,b)=>b-a).forEach(idx => discard.push(players[0].hand.splice(idx, 1)[0]));
             }
-            
-            uiMode = 'ANIMATING'; updateUI();
+            selectedTokens = []; uiMode = 'ANIMATING'; updateUI();
             let isHit = boardState[index] && !boardState[index].destroyed;
             animateHitMiss(index, isHit ? 'hit' : 'miss', () => { processHit(index, false); finishShot(); });
-        }
-        else if (uiMode === 'FAST_FIRING') {
-            if(selectedTokens.length > 0) {
-                let tokenIdx = selectedTokens[0]; discard.push(players[currentPlayer].hand[tokenIdx]); players[currentPlayer].hand.splice(tokenIdx, 1); selectedTokens = [];
-            }
-            executeFastShotLogic(index);
+            
+        } else if (uiMode === 'FAST_FIRING') {
+            if(selectedTokens.length > 0) discard.push(players[0].hand.splice(selectedTokens[0], 1)[0]);
+            selectedTokens = []; executeFastShotLogic(index);
         }
     }
 
     function processHit(idx, isFastShot) {
         let cell = boardState[idx];
         if(!cell || cell.destroyed) return log("Плюх.");
-        
-        if (cell.type === 'submarine' && isFastShot) { log("💦 <b>Подлодка:</b> Увернулась от быстрого выстрела!"); return; }
+        if (cell.type === 'submarine' && isFastShot) return log("💦 <b>Подлодка:</b> Увернулась от быстрого выстрела!");
         
         cell.destroyed = true; players[currentPlayer].vp += 1; log("💥 ПОПАДАНИЕ! +1 ПО.");
-
-        let shipId = cell.shipId;
-        let isFullyDestroyed = true;
-        boardState.forEach(c => { if(c && c.shipId === shipId && !c.destroyed) isFullyDestroyed = false; });
+        let isFullyDestroyed = !boardState.some(c => c && c.shipId === cell.shipId && !c.destroyed);
 
         if(isFullyDestroyed) {
             players[currentPlayer].vp += 1; players[cell.owner].shipsOnBoard--;
@@ -601,21 +559,16 @@
                 players[currentPlayer].vp += 1; drawTokens(currentPlayer, 1);
                 log("⚓ <b>Линкор:</b> +1 ПО и +1 жетон за фраг!");
             }
-            boardState.forEach((c, i) => { if(c && c.shipId === shipId) boardState[i] = null; });
+            boardState.forEach((c, i) => { if(c && c.shipId === cell.shipId) boardState[i] = null; });
         }
-        updateBoardUI();
+        checkWin(); updateBoardUI();
     }
 
-    // --- УМНЫЙ БОТ (ДОБИВАЕТ И НЕ ТРАТИТ ЖЕТОНЫ ЗРЯ) ---
-    function getShipTypeByCoord(coord) {
-        let idx = getIndexFromCoord(coord);
-        return boardState[idx] ? boardState[idx].type : null;
-    }
-
-    function getEnemyShipCoords(excludeType = null) {
+    // --- БОТ ---
+    function getEnemyShipCoords(botId, excludeType = null) {
         let coords = [];
         boardState.forEach((c, i) => { 
-            if (c && c.owner === 0 && !c.destroyed) {
+            if (c && c.owner !== botId && !c.destroyed) {
                 if (excludeType && c.type === excludeType) return;
                 coords.push(getCoordFromIndex(i)); 
             }
@@ -623,13 +576,12 @@
         return coords;
     }
     
-    function getWoundedEnemyCoords(excludeType = null) {
-        let woundedShipIds = new Set();
-        boardState.forEach((c) => { if (c && c.owner === 0 && c.destroyed) woundedShipIds.add(c.shipId); });
-        
+    function getWoundedEnemyCoords(botId, excludeType = null) {
+        let woundedIds = new Set();
+        boardState.forEach(c => { if (c && c.owner !== botId && c.destroyed) woundedIds.add(c.shipId); });
         let coords = [];
         boardState.forEach((c, i) => {
-            if (c && c.owner === 0 && !c.destroyed && woundedShipIds.has(c.shipId)) {
+            if (c && c.owner !== botId && !c.destroyed && woundedIds.has(c.shipId)) {
                 if (excludeType && c.type === excludeType) return;
                 coords.push(getCoordFromIndex(i));
             }
@@ -640,18 +592,11 @@
     function findAccurateTarget(targetCoords, hand) {
         for(let eC of targetCoords) {
             if (hand.includes(eC)) return { type: 'exact', coord: eC, tokens: [hand.indexOf(eC)] };
-            
             if (hand.length >= 2) {
                 let ecL = eC.match(/[А-Я]+/)[0]; let ecN = eC.match(/[0-9]+/)[0];
-                for(let i=0; i<hand.length; i++) {
-                    for(let j=i+1; j<hand.length; j++) {
-                        let t1 = hand[i]; let t2 = hand[j];
-                        let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
-                        let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
-                        if ((t1L === ecL && t2N === ecN) || (t2L === ecL && t1N === ecN)) {
-                            return { type: 'cross', coord: eC, tokens: [i, j] };
-                        }
-                    }
+                for(let i=0; i<hand.length; i++) for(let j=i+1; j<hand.length; j++) {
+                    let t1 = hand[i]; let t2 = hand[j];
+                    if ((t1[0]===ecL && t2.slice(1)===ecN) || (t2[0]===ecL && t1.slice(1)===ecN)) return { type: 'cross', coord: eC, tokens: [i, j] };
                 }
             }
         }
@@ -659,53 +604,49 @@
     }
 
     function playBotTurn() {
-        if(players[0].vp >= 21 || players[1].vp >= 21) return;
+        if(checkWin()) return;
         uiMode = 'ANIMATING'; updateUI(); 
         
         setTimeout(() => {
+            if(isGameOver) return;
             if(shotsRemaining > 0) { botDoShoot(); return; }
             if(actionsLeft <= 0) { endTurn(); return; }
+            
+            let p = players[currentPlayer];
 
             // 1. Контроль
             if(!usedActions.includes('CONTROL')) {
-                let sectorCounts = [ {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0} ];
-                boardState.forEach((cell, idx) => { if(cell && !cell.destroyed) sectorCounts[getSector(idx)][cell.owner]++; });
-                let tokensToUse = [];
-                let checkedSectors = [];
+                let sectorCounts = [ {}, {}, {}, {} ];
+                for(let s=0; s<4; s++) for(let id=0; id<numPlayers; id++) sectorCounts[s][id] = 0;
+                boardState.forEach((c, idx) => { if(c && !c.destroyed) sectorCounts[getSector(idx)][c.owner]++; });
                 
-                players[1].hand.forEach((token, idx) => {
+                let tokensToUse = []; let checkedSectors = [];
+                p.hand.forEach((token, idx) => {
                     let s = getSector(getIndexFromCoord(token));
-                    if (sectorCounts[s][1] > sectorCounts[s][0] && !checkedSectors.includes(s)) {
-                        tokensToUse.push(idx);
-                        checkedSectors.push(s);
-                    }
+                    let myC = sectorCounts[s][currentPlayer];
+                    let maxE = 0; for(let id=0; id<numPlayers; id++) if(id!==currentPlayer && sectorCounts[s][id]>maxE) maxE=sectorCounts[s][id];
+                    if (myC > maxE && !checkedSectors.includes(s)) { tokensToUse.push(idx); checkedSectors.push(s); }
                 });
-                
-                if(tokensToUse.length > 0) {
-                    executeControlLogic(tokensToUse, () => { usedActions.push('CONTROL'); actionsLeft--; playBotTurn(); });
-                    return;
-                }
+                if(tokensToUse.length > 0) { executeControlLogic(tokensToUse, () => { usedActions.push('CONTROL'); actionsLeft--; playBotTurn(); }); return; }
             }
 
-            let allEnemyCoords = getEnemyShipCoords();
-            let woundedCoords = getWoundedEnemyCoords();
-            let canShoot = !usedActions.includes('FIRE') && players[1].shipsOnBoard > 0 && allEnemyCoords.length > 0;
+            let enemies = getEnemyShipCoords(currentPlayer);
+            let woundeds = getWoundedEnemyCoords(currentPlayer);
+            let canShoot = !usedActions.includes('FIRE') && p.shipsOnBoard > 0 && enemies.length > 0;
             
-            // 2. Поиск Точного Выстрела
-            if (canShoot && players[1].hand.length >= 1) {
-                let accurate = findAccurateTarget(woundedCoords, players[1].hand) || findAccurateTarget(allEnemyCoords, players[1].hand);
+            // 2. Точный
+            if (canShoot && p.hand.length >= 1) {
+                let accurate = findAccurateTarget(woundeds, p.hand) || findAccurateTarget(enemies, p.hand);
                 if (accurate) { startFireAction(); playBotTurn(); return; }
             }
 
-            // 3. Спуск корабля
-            if(!usedActions.includes('DEPLOY') && players[1].unbuilt.length > 0) {
-                let affordable = players[1].unbuilt.filter(s => shipBlueprints[s].size <= players[1].hand.length);
+            // 3. Спуск
+            if(!usedActions.includes('DEPLOY') && p.unbuilt.length > 0) {
+                let affordable = p.unbuilt.filter(s => shipBlueprints[s].size <= p.hand.length);
                 if(affordable.length > 0) {
                     let shipId = affordable[Math.floor(Math.random() * affordable.length)];
                     let size = shipBlueprints[shipId].size;
-                    let handCopy = [...players[1].hand]; shuffle(handCopy);
-                    let paymentTokens = handCopy.slice(0, size);
-
+                    let paymentTokens = [...p.hand].sort(()=>Math.random()-0.5).slice(0, size);
                     let placed = false;
                     for(let anchorCoord of paymentTokens) {
                         let startIdx = getIndexFromCoord(anchorCoord);
@@ -723,115 +664,90 @@
                 }
             }
 
-            // 4. Оценка Быстрого Выстрела (не стреляем просто так!)
+            // 4. Быстрый
             if (canShoot) {
-                let isFree = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
-                // Исключаем подлодки из целей для быстрого выстрела
-                let woundedFastTargets = getWoundedEnemyCoords('submarine');
-                let allFastTargets = getEnemyShipCoords('submarine');
-
-                // Бот стреляет Быстрым, только если:
-                // a) Есть бесплатный выстрел (стреляем в кого угодно, предпочтительно в раненых)
-                // б) Есть платный выстрел (жетон), но стреляем ТОЛЬКО по раненым, чтобы добить
-                if (isFree && allFastTargets.length > 0) {
-                    startFireAction(); playBotTurn(); return;
-                } else if (players[1].hand.length > 0 && woundedFastTargets.length > 0) {
-                    startFireAction(); playBotTurn(); return;
-                }
+                let isFree = hasActiveShip(currentPlayer, 'frigate') && !freeFastShotUsed;
+                let woundedFast = getWoundedEnemyCoords(currentPlayer, 'submarine');
+                let allFast = getEnemyShipCoords(currentPlayer, 'submarine');
+                if (isFree && allFast.length > 0) { startFireAction(); playBotTurn(); return; } 
+                else if (p.hand.length > 0 && woundedFast.length > 0) { startFireAction(); playBotTurn(); return; }
             }
 
             // 5. Разведка
             if(!usedActions.includes('SCOUT')) {
-                usedActions.push('SCOUT'); actionsLeft--;
-                executeScoutLogic(() => { playBotTurn(); });
-                return;
+                usedActions.push('SCOUT'); actionsLeft--; executeScoutLogic(() => playBotTurn()); return;
             }
 
-            // Пропуск
             actionsLeft--; playBotTurn();
 
         }, 1500);
     }
 
     function botDoShoot() {
-        let allEnemyCoords = getEnemyShipCoords();
-        let woundedCoords = getWoundedEnemyCoords();
+        if(isGameOver) return;
+        let enemies = getEnemyShipCoords(currentPlayer);
+        let woundeds = getWoundedEnemyCoords(currentPlayer);
+        let p = players[currentPlayer];
         
-        if(allEnemyCoords.length === 0) { shotsRemaining = 0; playBotTurn(); return; }
+        if(enemies.length === 0) { shotsRemaining = 0; playBotTurn(); return; }
 
-        let accurate = findAccurateTarget(woundedCoords, players[1].hand) || findAccurateTarget(allEnemyCoords, players[1].hand);
+        let accurate = findAccurateTarget(woundeds, p.hand) || findAccurateTarget(enemies, p.hand);
 
         if(accurate) {
             let targetIdx = getIndexFromCoord(accurate.coord);
             if (accurate.type === 'exact') {
-                let tokenCoord = players[1].hand[accurate.tokens[0]];
-                discard.push(tokenCoord); players[1].hand.splice(accurate.tokens[0], 1);
-                log(`<b>Бот:</b> ТОЧНЫЙ выстрел в ${accurate.coord} (прямое совпадение)!`);
+                discard.push(p.hand.splice(accurate.tokens[0], 1)[0]);
+                log(`ТОЧНЫЙ выстрел в ${accurate.coord}.`);
             } else {
-                let t1_coord = players[1].hand[accurate.tokens[0]];
-                let t2_coord = players[1].hand[accurate.tokens[1]];
-                accurate.tokens.sort((a,b)=>b-a).forEach(idx => { discard.push(players[1].hand[idx]); players[1].hand.splice(idx, 1); });
-                log(`<b>Бот:</b> ТОЧНЫЙ выстрел в ${accurate.coord} (скрещение ${t1_coord} и ${t2_coord})!`);
+                accurate.tokens.sort((a,b)=>b-a).forEach(idx => discard.push(p.hand.splice(idx, 1)[0]));
+                log(`ТОЧНЫЙ выстрел в ${accurate.coord} (скрещение).`);
             }
             let isHit = boardState[targetIdx] && !boardState[targetIdx].destroyed;
             animateHitMiss(targetIdx, isHit ? 'hit' : 'miss', () => { processHit(targetIdx, false); finishShot(() => playBotTurn()); });
             return;
         }
 
-        let isFree = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
-        
-        // Быстрые цели (без подлодок)
-        let woundedFastTargets = getWoundedEnemyCoords('submarine');
-        let allFastTargets = getEnemyShipCoords('submarine');
+        let isFree = hasActiveShip(currentPlayer, 'frigate') && !freeFastShotUsed;
+        let woundedFast = getWoundedEnemyCoords(currentPlayer, 'submarine');
+        let allFast = getEnemyShipCoords(currentPlayer, 'submarine');
 
-        if (allFastTargets.length === 0 || (!isFree && woundedFastTargets.length === 0)) {
-            // Либо не в кого стрелять (только подлодки), либо жалко жетон на случайную цель
-            shotsRemaining = 0; playBotTurn(); return; 
-        }
+        if (allFast.length === 0 || (!isFree && woundedFast.length === 0)) { shotsRemaining = 0; playBotTurn(); return; }
 
-        let targetCoord;
-        if (woundedFastTargets.length > 0) {
-            targetCoord = woundedFastTargets[Math.floor(Math.random() * woundedFastTargets.length)];
-            log("Бот берет на прицел раненый корабль...");
-        } else {
-            targetCoord = allFastTargets[Math.floor(Math.random() * allFastTargets.length)];
-        }
-        
+        let targetCoord = woundedFast.length > 0 ? woundedFast[Math.floor(Math.random() * woundedFast.length)] : allFast[Math.floor(Math.random() * allFast.length)];
         let targetIdx = getIndexFromCoord(targetCoord);
         
-        if(isFree) { freeFastShotUsed = true; log("<b>Бот:</b> Быстрый выстрел (Фрегат) по " + targetCoord); } 
-        else {
-            let rIdx = Math.floor(Math.random() * players[1].hand.length);
-            discard.push(players[1].hand[rIdx]); players[1].hand.splice(rIdx, 1);
-            log("<b>Бот:</b> Быстрый выстрел (1 жетон) по " + targetCoord);
-        }
+        if(isFree) { freeFastShotUsed = true; log("Быстрый выстрел (Фрегат) по " + targetCoord); } 
+        else { discard.push(p.hand.splice(Math.floor(Math.random() * p.hand.length), 1)[0]); log("Быстрый выстрел по " + targetCoord); }
 
-        executeFastShotLogic(targetIdx, () => { playBotTurn(); });
+        executeFastShotLogic(targetIdx, () => playBotTurn());
     }
 
     function endTurn() { 
-        currentPlayer = currentPlayer === 0 ? 1 : 0; 
-        actionsLeft = 2; usedActions = []; selectedTokens = []; uiMode = 'IDLE'; shotsRemaining = 0;
-        freeFastShotUsed = false;
-        log(`<b>--- Ход: ${players[currentPlayer].name} ---</b>`); 
+        if(checkWin()) return;
+        currentPlayer = (currentPlayer + 1) % numPlayers; 
+        actionsLeft = 2; usedActions = []; selectedTokens = []; uiMode = 'IDLE'; shotsRemaining = 0; freeFastShotUsed = false;
+        log(`<b>--- Ход передается ---</b>`); 
         updateDeploySelect(); updateUI(); 
-
-        if(currentPlayer === 1) playBotTurn();
+        if(currentPlayer !== 0) playBotTurn();
     }
 
     function updateUI() {
+        if(isGameOver) return;
+        
         let turnText = document.getElementById('current-player-text');
         turnText.innerText = `Ход: ${players[currentPlayer].name}`;
-        turnText.style.color = currentPlayer === 0 ? '#60a5fa' : '#f87171';
+        turnText.style.color = players[currentPlayer].colorHex;
         
-        document.getElementById('turn-info').className = `info-panel ${players[currentPlayer].colorClass}`;
+        document.getElementById('turn-info').className = `info-panel score-${players[currentPlayer].colorClass}`;
         document.getElementById('actions-left').innerText = actionsLeft;
         document.getElementById('shots-left-text').innerText = shotsRemaining;
 
-        document.getElementById('vp-p0').innerText = players[0].vp; document.getElementById('ships-p0').innerText = players[0].shipsOnBoard;
-        document.getElementById('vp-p1').innerText = players[1].vp; document.getElementById('ships-p1').innerText = players[1].shipsOnBoard;
+        players.forEach(p => {
+            document.getElementById(`vp-p${p.id}`).innerText = p.vp;
+            document.getElementById(`ships-p${p.id}`).innerText = p.shipsOnBoard;
+        });
 
-        let disabledAll = (currentPlayer === 1 || uiMode !== 'IDLE' && uiMode !== 'ACCURATE_FIRING' && uiMode !== 'DEPLOYING');
+        let disabledAll = (currentPlayer !== 0 || uiMode !== 'IDLE' && uiMode !== 'ACCURATE_FIRING' && uiMode !== 'DEPLOYING');
         
         document.getElementById('btn-scout').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('SCOUT'));
         document.getElementById('btn-deploy').disabled = disabledAll || (actionsLeft === 0 || usedActions.includes('DEPLOY') || players[0].unbuilt.length === 0) && uiMode !== 'DEPLOYING';
@@ -839,18 +755,13 @@
         document.getElementById('btn-end-turn').disabled = disabledAll;
 
         let btnFast = document.getElementById('btn-fire-fast');
-        if (hasActiveShip(0, 'frigate') && !freeFastShotUsed) btnFast.innerText = 'Быстрый 🎲 (Фрегат)';
-        else btnFast.innerText = 'Быстрый 🎲 (1ж)';
-
+        btnFast.innerText = (hasActiveShip(0, 'frigate') && !freeFastShotUsed) ? 'Быстрый 🎲 (Фрегат)' : 'Быстрый 🎲 (1ж)';
         let canFire = (!usedActions.includes('FIRE') && actionsLeft > 0 && players[0].shipsOnBoard > 0) || shotsRemaining > 0;
-        
         document.getElementById('btn-fire-acc').disabled = disabledAll || !canFire || players[0].hand.length < 1;
         btnFast.disabled = disabledAll || !canFire;
         document.getElementById('btn-rotate').disabled = disabledAll;
 
         updateHandUI(); updateBoardUI();
-        if(players[0].vp >= 21) { setTimeout(()=>alert("ВЫ ПОБЕДИЛИ!"), 100); }
-        if(players[1].vp >= 21) { setTimeout(()=>alert("БОТ ПОБЕДИЛ!"), 100); }
     }
 
     function updateHandUI() {
@@ -860,73 +771,49 @@
             el.className = 'token' + (selectedTokens.includes(idx) ? ' selected' : '') + (specialCoords.includes(token) ? ' special' : '');
             el.innerText = token;
             el.onclick = () => { toggleTokenSelection(idx); if(uiMode === 'DEPLOYING') updateBoardUI(); };
-            el.onmouseenter = () => hoverToken(token, true);
-            el.onmouseleave = () => hoverToken(token, false);
+            el.onmouseenter = () => hoverToken(token, true); el.onmouseleave = () => hoverToken(token, false);
             handEl.appendChild(el);
         });
         
-        if(players[1].hand.length > 0) {
-            let botInfo = document.createElement('div');
-            botInfo.style.width = '100%'; botInfo.style.marginTop = '10px'; botInfo.style.color = '#f87171';
-            botInfo.innerText = `Жетонов в руке Бота: ${players[1].hand.length}`;
-            handEl.appendChild(botInfo);
+        let botsInfo = document.getElementById('bots-info'); botsInfo.innerHTML = '';
+        for(let i=1; i<numPlayers; i++) {
+            botsInfo.innerHTML += `<span style="color:${players[i].colorHex}; margin-right: 15px;">Жетоны ${players[i].name}: <b>${players[i].hand.length}</b></span>`;
         }
     }
 
     function updateBoardUI() {
-        let selectedCoordsForDeploy = [];
-        if (uiMode === 'DEPLOYING' && currentPlayer === 0) {
-            selectedCoordsForDeploy = selectedTokens.map(idx => players[0].hand[idx]);
-        }
+        let selectedCoordsForDeploy = (uiMode === 'DEPLOYING' && currentPlayer === 0) ? selectedTokens.map(idx => players[0].hand[idx]) : [];
 
         for(let i=0; i<100; i++) {
             let cell = document.getElementById('cell-'+i);
             let coord = getCoordFromIndex(i);
-            
             cell.innerHTML = `<span class="coord-text">${coord}</span>`;
             cell.className = 'cell' + (specialCoords.includes(coord) ? ' special' : '');
             cell.removeAttribute('title');
             
-            if (selectedCoordsForDeploy.includes(coord)) {
-                cell.classList.add('deploy-highlight');
-            }
+            if (selectedCoordsForDeploy.includes(coord)) cell.classList.add('deploy-highlight');
             
             if(boardState[i]) {
                 cell.classList.add(`ship-p${boardState[i].owner}`);
-                
-                let shipName = shipBlueprints[boardState[i].type].name;
-                let ownerName = boardState[i].owner === 0 ? 'Ваш' : 'Бота';
-                cell.title = `${shipName} (${ownerName})`;
+                cell.title = `${shipBlueprints[boardState[i].type].name} (${players[boardState[i].owner].name})`;
                 
                 if(boardState[i].isHead) {
                     cell.classList.add('head-cell');
-                    
                     let img = document.createElement('img');
                     img.src = `assets/fleet${boardState[i].owner + 1}/${boardState[i].type}.png`;
                     img.className = 'ship-image';
                     let size = shipBlueprints[boardState[i].type].size;
-                    
-                    if (boardState[i].dir === 'H') {
-                        img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
-                        img.style.height = '100%';
-                    } else {
-                        img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
-                        img.style.height = '100%';
-                        img.style.transformOrigin = '22.5px 22.5px'; 
-                        img.style.transform = 'rotate(90deg)';
-                    }
+                    img.style.width = `calc(${size} * 100% + ${(size - 1) * 2}px)`;
+                    img.style.height = '100%';
+                    if (boardState[i].dir !== 'H') { img.style.transformOrigin = '22.5px 22.5px'; img.style.transform = 'rotate(90deg)'; }
                     cell.appendChild(img);
                 }
-                
                 if(boardState[i].destroyed) {
-                    cell.innerHTML += `<div class="damage-marker"></div>`;
-                    cell.classList.add('hit-cell'); // Поднимает огонь над картинкой
+                    cell.innerHTML += `<div class="damage-marker"></div>`; cell.classList.add('hit-cell');
                 }
             }
         }
     }
-    
-    initGame();
 </script>
 </body>
 </html>
