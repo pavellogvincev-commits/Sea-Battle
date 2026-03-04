@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Tactical Battleship Prototype v1.5 (Visuals & UX)</title>
+    <title>Tactical Battleship Prototype v1.6 (Smart AI & Tooltips)</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; gap: 20px; user-select: none;}
         h1, h2, h3, h4 { margin-top: 0; }
@@ -26,22 +26,17 @@
         .cell:hover { background: #2a6b9e; }
         .cell.special { box-shadow: inset 0 0 10px rgba(255, 215, 0, 0.8); background: #1e5a85;}
         .cell.highlight-target { background: #10b981 !important; outline: 3px solid #fff; z-index: 10;}
-        
-        /* Новая подсветка выбранных жетонов при спуске корабля */
         .cell.deploy-highlight { background: rgba(16, 185, 129, 0.4) !important; box-shadow: inset 0 0 15px #10b981; outline: 2px dashed #10b981; z-index: 8;}
         
         .coord-text { position: absolute; top: 2px; left: 3px; font-size: 9px; color: rgba(255,255,255,0.4); pointer-events: none; z-index: 10;}
         
-        /* Стили для изображений кораблей */
         .ship-image { position: absolute; top: 0; left: 0; z-index: 20; pointer-events: none; }
-        
-        /* Фикс перекрытия: клетка с картинкой поднимается над всем полем */
         .head-cell { z-index: 15 !important; }
 
         .ship-p0 { background-color: rgba(59, 130, 246, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         .ship-p1 { background-color: rgba(239, 68, 68, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         
-        .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 25;}
+        .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 25; pointer-events: none;}
         
         .anim-effect { position: absolute; font-size: 35px; z-index: 30; animation: popUp 0.8s ease-out forwards; pointer-events: none; }
         @keyframes popUp { 0% { transform: scale(0); opacity: 1; } 50% { transform: scale(1.5); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
@@ -424,14 +419,29 @@
         let sectorCounts = [ {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0} ];
         boardState.forEach((cell, idx) => { if(cell && !cell.destroyed) sectorCounts[getSector(idx)][cell.owner]++; });
 
-        let earnedVP = 0; let tokensToRemove = [...tokensIndices];
+        let earnedVP = 0; 
+        let scoredSectors = [];
+        let tokensToRemove = [...tokensIndices];
+
         for(let idx of tokensIndices) {
             let sector = getSector(getIndexFromCoord(players[currentPlayer].hand[idx]));
+            
+            // Проверка: мы уже получали очки за этот сектор в этом ходу?
+            if (scoredSectors.includes(sector)) {
+                log(`Сектор ${sector + 1} уже принес очки в этом действии.`);
+                continue;
+            }
+
             let myCount = sectorCounts[sector][currentPlayer];
             let enemyCount = sectorCounts[sector][currentPlayer === 0 ? 1 : 0];
 
-            if(myCount > enemyCount) { earnedVP += 2; log(`Успешный контроль сектора. +2 ПО!`); } 
-            else { log(`Контроль сектора провален. (Клеток: ${myCount} против ${enemyCount}).`); }
+            if(myCount > enemyCount) { 
+                earnedVP += 2; 
+                scoredSectors.push(sector);
+                log(`Успешный контроль сектора ${sector + 1}. +2 ПО!`); 
+            } else { 
+                log(`Контроль сектора ${sector + 1} провален (${myCount} клеток против ${enemyCount}).`); 
+            }
         }
 
         tokensToRemove.sort((a,b)=>b-a).forEach(idx => { discard.push(players[currentPlayer].hand[idx]); players[currentPlayer].hand.splice(idx, 1); });
@@ -594,11 +604,47 @@
         updateBoardUI();
     }
 
-    // --- УМНЫЙ БОТ ---
+    // --- УМНЫЙ БОТ (УЛУЧШЕННОЕ НАВЕДЕНИЕ) ---
     function getEnemyShipCoords() {
         let coords = [];
         boardState.forEach((c, i) => { if (c && c.owner === 0 && !c.destroyed) coords.push(getCoordFromIndex(i)); });
         return coords;
+    }
+    
+    // Новая функция: найти недобитые корабли
+    function getWoundedEnemyCoords() {
+        let woundedShipIds = new Set();
+        boardState.forEach((c) => { if (c && c.owner === 0 && c.destroyed) woundedShipIds.add(c.shipId); });
+        
+        let coords = [];
+        boardState.forEach((c, i) => {
+            if (c && c.owner === 0 && !c.destroyed && woundedShipIds.has(c.shipId)) {
+                coords.push(getCoordFromIndex(i));
+            }
+        });
+        return coords;
+    }
+
+    // Помощник для бота: поиск точной цели по массиву координат
+    function findAccurateTarget(targetCoords, hand) {
+        for(let eC of targetCoords) {
+            if (hand.includes(eC)) return { type: 'exact', coord: eC, tokens: [hand.indexOf(eC)] };
+            
+            if (hand.length >= 2) {
+                let ecL = eC.match(/[А-Я]+/)[0]; let ecN = eC.match(/[0-9]+/)[0];
+                for(let i=0; i<hand.length; i++) {
+                    for(let j=i+1; j<hand.length; j++) {
+                        let t1 = hand[i]; let t2 = hand[j];
+                        let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
+                        let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
+                        if ((t1L === ecL && t2N === ecN) || (t2L === ecL && t1N === ecN)) {
+                            return { type: 'cross', coord: eC, tokens: [i, j] };
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     function playBotTurn() {
@@ -609,13 +655,20 @@
             if(shotsRemaining > 0) { botDoShoot(); return; }
             if(actionsLeft <= 0) { endTurn(); return; }
 
+            // 1. Контроль
             if(!usedActions.includes('CONTROL')) {
                 let sectorCounts = [ {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0}, {0:0, 1:0} ];
                 boardState.forEach((cell, idx) => { if(cell && !cell.destroyed) sectorCounts[getSector(idx)][cell.owner]++; });
                 let tokensToUse = [];
+                let checkedSectors = [];
+                
                 players[1].hand.forEach((token, idx) => {
                     let s = getSector(getIndexFromCoord(token));
-                    if (sectorCounts[s][1] > sectorCounts[s][0]) tokensToUse.push(idx);
+                    // Бот умный: не использует жетоны для секторов, которые уже взял
+                    if (sectorCounts[s][1] > sectorCounts[s][0] && !checkedSectors.includes(s)) {
+                        tokensToUse.push(idx);
+                        checkedSectors.push(s);
+                    }
                 });
                 
                 if(tokensToUse.length > 0) {
@@ -625,34 +678,16 @@
             }
 
             let enemyCoords = getEnemyShipCoords();
+            let woundedCoords = getWoundedEnemyCoords();
             let canShoot = !usedActions.includes('FIRE') && players[1].shipsOnBoard > 0 && enemyCoords.length > 0;
             
+            // 2. Поиск Точного Выстрела (Сначала по раненым, потом по всем)
             if (canShoot && players[1].hand.length >= 1) {
-                let hasAccurateTarget = false;
-                for(let eC of enemyCoords) {
-                    if(players[1].hand.includes(eC)) { hasAccurateTarget = true; break; }
-                    
-                    if(players[1].hand.length >= 2) {
-                        let ecL = eC.match(/[А-Я]+/)[0]; let ecN = eC.match(/[0-9]+/)[0];
-
-                        for(let i=0; i<players[1].hand.length; i++) {
-                            for(let j=i+1; j<players[1].hand.length; j++) {
-                                let t1 = players[1].hand[i]; let t2 = players[1].hand[j];
-                                let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
-                                let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
-
-                                if ((t1L === ecL && t2N === ecN) || (t2L === ecL && t1N === ecN)) {
-                                    hasAccurateTarget = true; break;
-                                }
-                            }
-                            if(hasAccurateTarget) break;
-                        }
-                    }
-                    if(hasAccurateTarget) break;
-                }
-                if (hasAccurateTarget) { startFireAction(); playBotTurn(); return; }
+                let accurate = findAccurateTarget(woundedCoords, players[1].hand) || findAccurateTarget(enemyCoords, players[1].hand);
+                if (accurate) { startFireAction(); playBotTurn(); return; }
             }
 
+            // 3. Спуск корабля
             if(!usedActions.includes('DEPLOY') && players[1].unbuilt.length > 0) {
                 let affordable = players[1].unbuilt.filter(s => shipBlueprints[s].size <= players[1].hand.length);
                 if(affordable.length > 0) {
@@ -678,12 +713,14 @@
                 }
             }
 
+            // 4. Быстрый Выстрел
             if (canShoot) {
                 let hasTokensForFast = players[1].hand.length > 0;
                 let freeFrigate = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
                 if (hasTokensForFast || freeFrigate) { startFireAction(); playBotTurn(); return; }
             }
 
+            // 5. Разведка
             if(!usedActions.includes('SCOUT')) {
                 usedActions.push('SCOUT'); actionsLeft--;
                 executeScoutLogic(() => { playBotTurn(); });
@@ -697,58 +734,43 @@
 
     function botDoShoot() {
         let enemyCoords = getEnemyShipCoords();
+        let woundedCoords = getWoundedEnemyCoords();
+        
         if(enemyCoords.length === 0) { log("Вражеских кораблей нет. Бот прекращает стрельбу."); shotsRemaining = 0; playBotTurn(); return; }
 
-        let accurateTargetCoord = null;
-        let tokenToDiscard = null;
-        let tokensToDiscard = null;
+        let accurate = findAccurateTarget(woundedCoords, players[1].hand) || findAccurateTarget(enemyCoords, players[1].hand);
 
-        for(let eC of enemyCoords) {
-            let exactIdx = players[1].hand.indexOf(eC);
-            if(exactIdx > -1) {
-                accurateTargetCoord = eC; tokenToDiscard = exactIdx; break;
-            }
-            
-            let ecL = eC.match(/[А-Я]+/)[0]; let ecN = eC.match(/[0-9]+/)[0];
-
-            if(players[1].hand.length >= 2) {
-                for(let i=0; i<players[1].hand.length; i++) {
-                    for(let j=i+1; j<players[1].hand.length; j++) {
-                        let t1 = players[1].hand[i]; let t2 = players[1].hand[j];
-                        let t1L = t1.match(/[А-Я]+/)[0]; let t1N = t1.match(/[0-9]+/)[0];
-                        let t2L = t2.match(/[А-Я]+/)[0]; let t2N = t2.match(/[0-9]+/)[0];
-
-                        if ((t1L === ecL && t2N === ecN) || (t2L === ecL && t1N === ecN)) {
-                            accurateTargetCoord = eC; tokensToDiscard = [i, j]; break;
-                        }
-                    }
-                    if(accurateTargetCoord) break;
-                }
-            }
-            if(accurateTargetCoord) break;
-        }
-
-        if(accurateTargetCoord) {
-            let targetIdx = getIndexFromCoord(accurateTargetCoord);
-            if (tokenToDiscard !== null) {
-                let tokenCoord = players[1].hand[tokenToDiscard];
-                discard.push(tokenCoord); players[1].hand.splice(tokenToDiscard, 1);
-                log(`<b>Бот:</b> ТОЧНЫЙ выстрел в ${accurateTargetCoord} (прямое совпадение)!`);
+        // Стреляем Точным
+        if(accurate) {
+            let targetIdx = getIndexFromCoord(accurate.coord);
+            if (accurate.type === 'exact') {
+                let tokenCoord = players[1].hand[accurate.tokens[0]];
+                discard.push(tokenCoord); players[1].hand.splice(accurate.tokens[0], 1);
+                log(`<b>Бот:</b> ТОЧНЫЙ выстрел в ${accurate.coord} (прямое совпадение)!`);
             } else {
-                let t1_coord = players[1].hand[tokensToDiscard[0]];
-                let t2_coord = players[1].hand[tokensToDiscard[1]];
-                tokensToDiscard.sort((a,b)=>b-a).forEach(idx => { discard.push(players[1].hand[idx]); players[1].hand.splice(idx, 1); });
-                log(`<b>Бот:</b> ТОЧНЫЙ выстрел в ${accurateTargetCoord} (скрещение ${t1_coord} и ${t2_coord})!`);
+                let t1_coord = players[1].hand[accurate.tokens[0]];
+                let t2_coord = players[1].hand[accurate.tokens[1]];
+                accurate.tokens.sort((a,b)=>b-a).forEach(idx => { discard.push(players[1].hand[idx]); players[1].hand.splice(idx, 1); });
+                log(`<b>Бот:</b> ТОЧНЫЙ выстрел в ${accurate.coord} (скрещение ${t1_coord} и ${t2_coord})!`);
             }
             let isHit = boardState[targetIdx] && !boardState[targetIdx].destroyed;
             animateHitMiss(targetIdx, isHit ? 'hit' : 'miss', () => { processHit(targetIdx, false); finishShot(() => playBotTurn()); });
             return;
         }
 
+        // Если Точного нет — стреляем Быстрым
         let isFree = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
         if(!isFree && players[1].hand.length === 0) { shotsRemaining = 0; playBotTurn(); return; }
 
-        let targetCoord = enemyCoords[Math.floor(Math.random() * enemyCoords.length)];
+        // Бот-стратег: если есть раненые корабли, он пытается добить их Быстрым выстрелом!
+        let targetCoord;
+        if (woundedCoords.length > 0) {
+            targetCoord = woundedCoords[Math.floor(Math.random() * woundedCoords.length)];
+            log("Бот берет на прицел раненый корабль...");
+        } else {
+            targetCoord = enemyCoords[Math.floor(Math.random() * enemyCoords.length)];
+        }
+        
         let targetIdx = getIndexFromCoord(targetCoord);
         
         if(isFree) { freeFastShotUsed = true; log("<b>Бот:</b> Быстрый выстрел (Фрегат) по " + targetCoord); } 
@@ -826,7 +848,6 @@
     }
 
     function updateBoardUI() {
-        // Получаем координаты жетонов, выбранных для спуска
         let selectedCoordsForDeploy = [];
         if (uiMode === 'DEPLOYING' && currentPlayer === 0) {
             selectedCoordsForDeploy = selectedTokens.map(idx => players[0].hand[idx]);
@@ -838,8 +859,8 @@
             
             cell.innerHTML = `<span class="coord-text">${coord}</span>`;
             cell.className = 'cell' + (specialCoords.includes(coord) ? ' special' : '');
+            cell.removeAttribute('title'); // Сброс тултипа
             
-            // Подсветка зеленым тех клеток, чьи жетоны выбраны при спуске
             if (selectedCoordsForDeploy.includes(coord)) {
                 cell.classList.add('deploy-highlight');
             }
@@ -847,8 +868,12 @@
             if(boardState[i]) {
                 cell.classList.add(`ship-p${boardState[i].owner}`);
                 
+                // Всплывающая подсказка (Tooltip)
+                let shipName = shipBlueprints[boardState[i].type].name;
+                let ownerName = boardState[i].owner === 0 ? 'Ваш' : 'Бота';
+                cell.title = `${shipName} (${ownerName})`;
+                
                 if(boardState[i].isHead) {
-                    // Поднимаем клетку над остальными для правильного наложения картинки
                     cell.classList.add('head-cell');
                     
                     let img = document.createElement('img');
