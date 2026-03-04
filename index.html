@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Tactical Battleship Prototype v1.6 (Smart AI & Tooltips)</title>
+    <title>Tactical Battleship Prototype v1.7 (AI Polish & Z-Index Fix)</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; gap: 20px; user-select: none;}
         h1, h2, h3, h4 { margin-top: 0; }
@@ -32,13 +32,16 @@
         
         .ship-image { position: absolute; top: 0; left: 0; z-index: 20; pointer-events: none; }
         .head-cell { z-index: 15 !important; }
+        
+        /* ИСПРАВЛЕНИЕ Z-INDEX: Клетки с попаданием поднимаются над всем остальным, чтобы огонь был поверх корабля */
+        .hit-cell { z-index: 25 !important; }
 
         .ship-p0 { background-color: rgba(59, 130, 246, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         .ship-p1 { background-color: rgba(239, 68, 68, 0.5); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); z-index: 2;}
         
-        .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 25; pointer-events: none;}
+        .damage-marker { position: absolute; width: 24px; height: 24px; background: orange; border-radius: 50%; border: 2px solid #8b0000; z-index: 30; pointer-events: none;}
         
-        .anim-effect { position: absolute; font-size: 35px; z-index: 30; animation: popUp 0.8s ease-out forwards; pointer-events: none; }
+        .anim-effect { position: absolute; font-size: 35px; z-index: 40; animation: popUp 0.8s ease-out forwards; pointer-events: none; }
         @keyframes popUp { 0% { transform: scale(0); opacity: 1; } 50% { transform: scale(1.5); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
 
         .hand { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; min-height: 40px; background: #222; padding: 10px; border-radius: 4px;}
@@ -426,7 +429,6 @@
         for(let idx of tokensIndices) {
             let sector = getSector(getIndexFromCoord(players[currentPlayer].hand[idx]));
             
-            // Проверка: мы уже получали очки за этот сектор в этом ходу?
             if (scoredSectors.includes(sector)) {
                 log(`Сектор ${sector + 1} уже принес очки в этом действии.`);
                 continue;
@@ -604,28 +606,37 @@
         updateBoardUI();
     }
 
-    // --- УМНЫЙ БОТ (УЛУЧШЕННОЕ НАВЕДЕНИЕ) ---
-    function getEnemyShipCoords() {
+    // --- УМНЫЙ БОТ (ДОБИВАЕТ И НЕ ТРАТИТ ЖЕТОНЫ ЗРЯ) ---
+    function getShipTypeByCoord(coord) {
+        let idx = getIndexFromCoord(coord);
+        return boardState[idx] ? boardState[idx].type : null;
+    }
+
+    function getEnemyShipCoords(excludeType = null) {
         let coords = [];
-        boardState.forEach((c, i) => { if (c && c.owner === 0 && !c.destroyed) coords.push(getCoordFromIndex(i)); });
+        boardState.forEach((c, i) => { 
+            if (c && c.owner === 0 && !c.destroyed) {
+                if (excludeType && c.type === excludeType) return;
+                coords.push(getCoordFromIndex(i)); 
+            }
+        });
         return coords;
     }
     
-    // Новая функция: найти недобитые корабли
-    function getWoundedEnemyCoords() {
+    function getWoundedEnemyCoords(excludeType = null) {
         let woundedShipIds = new Set();
         boardState.forEach((c) => { if (c && c.owner === 0 && c.destroyed) woundedShipIds.add(c.shipId); });
         
         let coords = [];
         boardState.forEach((c, i) => {
             if (c && c.owner === 0 && !c.destroyed && woundedShipIds.has(c.shipId)) {
+                if (excludeType && c.type === excludeType) return;
                 coords.push(getCoordFromIndex(i));
             }
         });
         return coords;
     }
 
-    // Помощник для бота: поиск точной цели по массиву координат
     function findAccurateTarget(targetCoords, hand) {
         for(let eC of targetCoords) {
             if (hand.includes(eC)) return { type: 'exact', coord: eC, tokens: [hand.indexOf(eC)] };
@@ -664,7 +675,6 @@
                 
                 players[1].hand.forEach((token, idx) => {
                     let s = getSector(getIndexFromCoord(token));
-                    // Бот умный: не использует жетоны для секторов, которые уже взял
                     if (sectorCounts[s][1] > sectorCounts[s][0] && !checkedSectors.includes(s)) {
                         tokensToUse.push(idx);
                         checkedSectors.push(s);
@@ -677,13 +687,13 @@
                 }
             }
 
-            let enemyCoords = getEnemyShipCoords();
+            let allEnemyCoords = getEnemyShipCoords();
             let woundedCoords = getWoundedEnemyCoords();
-            let canShoot = !usedActions.includes('FIRE') && players[1].shipsOnBoard > 0 && enemyCoords.length > 0;
+            let canShoot = !usedActions.includes('FIRE') && players[1].shipsOnBoard > 0 && allEnemyCoords.length > 0;
             
-            // 2. Поиск Точного Выстрела (Сначала по раненым, потом по всем)
+            // 2. Поиск Точного Выстрела
             if (canShoot && players[1].hand.length >= 1) {
-                let accurate = findAccurateTarget(woundedCoords, players[1].hand) || findAccurateTarget(enemyCoords, players[1].hand);
+                let accurate = findAccurateTarget(woundedCoords, players[1].hand) || findAccurateTarget(allEnemyCoords, players[1].hand);
                 if (accurate) { startFireAction(); playBotTurn(); return; }
             }
 
@@ -713,11 +723,21 @@
                 }
             }
 
-            // 4. Быстрый Выстрел
+            // 4. Оценка Быстрого Выстрела (не стреляем просто так!)
             if (canShoot) {
-                let hasTokensForFast = players[1].hand.length > 0;
-                let freeFrigate = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
-                if (hasTokensForFast || freeFrigate) { startFireAction(); playBotTurn(); return; }
+                let isFree = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
+                // Исключаем подлодки из целей для быстрого выстрела
+                let woundedFastTargets = getWoundedEnemyCoords('submarine');
+                let allFastTargets = getEnemyShipCoords('submarine');
+
+                // Бот стреляет Быстрым, только если:
+                // a) Есть бесплатный выстрел (стреляем в кого угодно, предпочтительно в раненых)
+                // б) Есть платный выстрел (жетон), но стреляем ТОЛЬКО по раненым, чтобы добить
+                if (isFree && allFastTargets.length > 0) {
+                    startFireAction(); playBotTurn(); return;
+                } else if (players[1].hand.length > 0 && woundedFastTargets.length > 0) {
+                    startFireAction(); playBotTurn(); return;
+                }
             }
 
             // 5. Разведка
@@ -727,20 +747,20 @@
                 return;
             }
 
+            // Пропуск
             actionsLeft--; playBotTurn();
 
         }, 1500);
     }
 
     function botDoShoot() {
-        let enemyCoords = getEnemyShipCoords();
+        let allEnemyCoords = getEnemyShipCoords();
         let woundedCoords = getWoundedEnemyCoords();
         
-        if(enemyCoords.length === 0) { log("Вражеских кораблей нет. Бот прекращает стрельбу."); shotsRemaining = 0; playBotTurn(); return; }
+        if(allEnemyCoords.length === 0) { shotsRemaining = 0; playBotTurn(); return; }
 
-        let accurate = findAccurateTarget(woundedCoords, players[1].hand) || findAccurateTarget(enemyCoords, players[1].hand);
+        let accurate = findAccurateTarget(woundedCoords, players[1].hand) || findAccurateTarget(allEnemyCoords, players[1].hand);
 
-        // Стреляем Точным
         if(accurate) {
             let targetIdx = getIndexFromCoord(accurate.coord);
             if (accurate.type === 'exact') {
@@ -758,17 +778,23 @@
             return;
         }
 
-        // Если Точного нет — стреляем Быстрым
         let isFree = hasActiveShip(1, 'frigate') && !freeFastShotUsed;
-        if(!isFree && players[1].hand.length === 0) { shotsRemaining = 0; playBotTurn(); return; }
+        
+        // Быстрые цели (без подлодок)
+        let woundedFastTargets = getWoundedEnemyCoords('submarine');
+        let allFastTargets = getEnemyShipCoords('submarine');
 
-        // Бот-стратег: если есть раненые корабли, он пытается добить их Быстрым выстрелом!
+        if (allFastTargets.length === 0 || (!isFree && woundedFastTargets.length === 0)) {
+            // Либо не в кого стрелять (только подлодки), либо жалко жетон на случайную цель
+            shotsRemaining = 0; playBotTurn(); return; 
+        }
+
         let targetCoord;
-        if (woundedCoords.length > 0) {
-            targetCoord = woundedCoords[Math.floor(Math.random() * woundedCoords.length)];
+        if (woundedFastTargets.length > 0) {
+            targetCoord = woundedFastTargets[Math.floor(Math.random() * woundedFastTargets.length)];
             log("Бот берет на прицел раненый корабль...");
         } else {
-            targetCoord = enemyCoords[Math.floor(Math.random() * enemyCoords.length)];
+            targetCoord = allFastTargets[Math.floor(Math.random() * allFastTargets.length)];
         }
         
         let targetIdx = getIndexFromCoord(targetCoord);
@@ -859,7 +885,7 @@
             
             cell.innerHTML = `<span class="coord-text">${coord}</span>`;
             cell.className = 'cell' + (specialCoords.includes(coord) ? ' special' : '');
-            cell.removeAttribute('title'); // Сброс тултипа
+            cell.removeAttribute('title');
             
             if (selectedCoordsForDeploy.includes(coord)) {
                 cell.classList.add('deploy-highlight');
@@ -868,7 +894,6 @@
             if(boardState[i]) {
                 cell.classList.add(`ship-p${boardState[i].owner}`);
                 
-                // Всплывающая подсказка (Tooltip)
                 let shipName = shipBlueprints[boardState[i].type].name;
                 let ownerName = boardState[i].owner === 0 ? 'Ваш' : 'Бота';
                 cell.title = `${shipName} (${ownerName})`;
@@ -893,7 +918,10 @@
                     cell.appendChild(img);
                 }
                 
-                if(boardState[i].destroyed) cell.innerHTML += `<div class="damage-marker"></div>`;
+                if(boardState[i].destroyed) {
+                    cell.innerHTML += `<div class="damage-marker"></div>`;
+                    cell.classList.add('hit-cell'); // Поднимает огонь над картинкой
+                }
             }
         }
     }
